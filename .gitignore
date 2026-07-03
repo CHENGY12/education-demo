@@ -2,3 +2,19 @@ github_token.txt
 *.log
 .DS_Store
 node_modules/
+__pycache__/
+*.py[cod]
+
+# Large action-localization artifacts.
+datasets/oops/raw/
+datasets/oops/features/
+datasets/oops/hf_pengxiang/
+datasets/oops/annotations/
+datasets/oops/*.csv
+runs/
+logs/
+models/**/*.pt
+models/**/*.pth
+models/**/*.pyth
+models/**/*.ckpt
+models/**/.cache/

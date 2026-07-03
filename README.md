@@ -43,6 +43,17 @@ node scripts/smoke-test.js
 - `knowledge-tree.json`: 离线知识点数据
 - `scripts/smoke-test.js`: 无依赖检查脚本
 
+## Oops Action Localization
+
+仓库也包含 Oops unintentional action temporal localization 相关代码：
+
+- `oops_temporal/`: 数据索引、特征加载、baseline、Transformer temporal head、训练和指标代码
+- `scripts/*oops*`: Oops 数据解压、I3D 特征抽取、Slurm 提交和训练脚本
+- `datasets/oops/`: 数据下载说明和下载脚本
+- `models/i3d_carrotbu/` 和 `models/hf_i3d_candidates/`: I3D 相关轻量代码、说明和配置
+
+大文件没有入库，包括原始视频、标注目录、抽取后的 features、模型权重、runs 和 logs。需要数据时先按 `datasets/oops/README.md` 下载，再按 `oops_temporal/README.md` 运行。
+
 ## 数据格式
 
 `knowledge-tree.json` 的核心字段：
