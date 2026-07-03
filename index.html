@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>知识技能树 Demo</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <div class="brand">
+          <div class="brand-mark" aria-hidden="true">
+            <svg viewBox="0 0 32 32" focusable="false">
+              <path d="M16 3 28 9.7v12.6L16 29 4 22.3V9.7L16 3Z" />
+              <path d="M16 8.5 23 12.4v7.2l-7 3.9-7-3.9v-7.2l7-3.9Z" />
+            </svg>
+          </div>
+          <div>
+            <h1 id="treeTitle">知识技能树</h1>
+            <p id="treeSubtitle">Learning path map</p>
+          </div>
+        </div>
+
+        <div class="toolbar" role="toolbar" aria-label="技能树工具栏">
+          <label class="search-box">
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path d="m21 21-4.35-4.35" />
+              <circle cx="11" cy="11" r="7" />
+            </svg>
+            <input id="searchInput" type="search" placeholder="搜索技能" autocomplete="off" />
+          </label>
+
+          <label class="icon-button file-button" title="导入知识树 JSON" aria-label="导入知识树 JSON">
+            <input id="fileInput" type="file" accept="application/json,.json" />
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path d="M12 3v12" />
+              <path d="m7 8 5-5 5 5" />
+              <path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" />
+            </svg>
+          </label>
+
+          <button id="fitButton" class="icon-button" type="button" title="适配视图" aria-label="适配视图">
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path d="M8 3H5a2 2 0 0 0-2 2v3" />
+              <path d="M16 3h3a2 2 0 0 1 2 2v3" />
+              <path d="M8 21H5a2 2 0 0 1-2-2v-3" />
+              <path d="M16 21h3a2 2 0 0 0 2-2v-3" />
+            </svg>
+          </button>
+
+          <button id="resetButton" class="icon-button" type="button" title="重置进度" aria-label="重置进度">
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path d="M3 12a9 9 0 1 0 3-6.7" />
+              <path d="M3 4v6h6" />
+            </svg>
+          </button>
+        </div>
+      </header>
+
+      <main class="workspace">
+        <aside class="sidebar panel" aria-label="技能树概览">
+          <section class="progress-block">
+            <div class="progress-ring" aria-hidden="true">
+              <svg viewBox="0 0 120 120">
+                <circle class="ring-track" cx="60" cy="60" r="48" />
+                <circle id="progressArc" class="ring-value" cx="60" cy="60" r="48" />
+              </svg>
+              <strong id="progressPercent">0%</strong>
+            </div>
+            <div class="progress-copy">
+              <span id="progressLabel">0 / 0</span>
+              <small id="currentLabel">0 个可学习</small>
+            </div>
+          </section>
+
+          <section>
+            <h2>领域</h2>
+            <div id="domainFilters" class="filter-list"></div>
+          </section>
+
+          <section>
+            <h2>状态</h2>
+            <div class="legend">
+              <span><i class="legend-dot mastered"></i>已掌握</span>
+              <span><i class="legend-dot available"></i>可学习</span>
+              <span><i class="legend-dot locked"></i>未解锁</span>
+            </div>
+          </section>
+        </aside>
+
+        <section id="treeStage" class="tree-stage" aria-label="知识技能树画布">
+          <div id="treeWorld" class="tree-world">
+            <svg id="connectionLayer" class="connection-layer" aria-hidden="true"></svg>
+            <div id="nodeLayer" class="node-layer"></div>
+          </div>
+
+          <div class="zoom-dock" role="toolbar" aria-label="缩放">
+            <button id="zoomInButton" class="icon-button" type="button" title="放大" aria-label="放大">
+              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path d="M12 5v14" />
+                <path d="M5 12h14" />
+              </svg>
+            </button>
+            <button id="zoomOutButton" class="icon-button" type="button" title="缩小" aria-label="缩小">
+              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path d="M5 12h14" />
+              </svg>
+            </button>
+          </div>
+        </section>
+
+        <aside id="detailPanel" class="detail-panel panel" aria-label="技能详情"></aside>
+      </main>
+    </div>
+
+    <template id="emptyDetailTemplate">
+      <div class="empty-detail">
+        <div class="empty-orbit" aria-hidden="true"></div>
+        <h2>选择一个知识点</h2>
+      </div>
+    </template>
+
+    <script src="app.js" defer></script>
+  </body>
+</html>

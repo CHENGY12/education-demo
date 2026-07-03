@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>知识技能树 Demo V2</title>
+    <link rel="stylesheet" href="skill-tree-v2.css" />
+  </head>
+  <body>
+    <div class="v2-shell">
+      <header class="v2-topbar">
+        <div class="v2-brand">
+          <div class="v2-crest" aria-hidden="true">
+            <svg viewBox="0 0 32 32" focusable="false">
+              <path d="M16 3 28 10v12L16 29 4 22V10L16 3Z" />
+              <path d="M16 8v8l6 3.5" />
+              <path d="m16 16-6 3.5" />
+            </svg>
+          </div>
+          <div>
+            <p class="v2-version">Version 2 · vertical skill tree</p>
+            <h1 id="v2Title">知识技能树</h1>
+          </div>
+        </div>
+
+        <nav class="v2-actions" aria-label="版本与工具">
+          <a class="v2-link" href="index.html">V1</a>
+          <a class="v2-link active" href="skill-tree-v2.html">V2</a>
+          <label class="v2-search">
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <circle cx="11" cy="11" r="7" />
+              <path d="m21 21-4.35-4.35" />
+            </svg>
+            <input id="v2Search" type="search" placeholder="搜索知识点" autocomplete="off" />
+          </label>
+          <button id="v2Reset" class="v2-icon-button" type="button" title="重置进度" aria-label="重置进度">
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path d="M3 12a9 9 0 1 0 3-6.7" />
+              <path d="M3 4v6h6" />
+            </svg>
+          </button>
+        </nav>
+      </header>
+
+      <main class="v2-layout">
+        <aside class="v2-codex" aria-label="技能树状态">
+          <section class="v2-progress">
+            <div class="v2-progress-card">
+              <span>完成进度</span>
+              <strong id="v2Progress">0%</strong>
+              <div class="v2-meter" aria-hidden="true"><i id="v2Meter"></i></div>
+              <small id="v2ProgressText">0 / 0 已掌握</small>
+            </div>
+            <div class="v2-stat-grid">
+              <div>
+                <span id="v2AvailableCount">0</span>
+                <small>可学习</small>
+              </div>
+              <div>
+                <span id="v2LockedCount">0</span>
+                <small>未解锁</small>
+              </div>
+            </div>
+          </section>
+
+          <section>
+            <h2>领域</h2>
+            <div id="v2Domains" class="v2-domain-list"></div>
+          </section>
+
+          <section>
+            <h2>图例</h2>
+            <div class="v2-legend">
+              <span><i class="done"></i>已掌握</span>
+              <span><i class="ready"></i>可学习</span>
+              <span><i class="locked"></i>未解锁</span>
+            </div>
+          </section>
+        </aside>
+
+        <section class="v2-map-panel" aria-label="自下而上的技能树">
+          <div class="v2-map-header">
+            <div>
+              <p id="v2Subtitle">Learning path map</p>
+              <h2>从基础到终局产出</h2>
+            </div>
+            <div class="v2-direction" aria-hidden="true">
+              <span>基础</span>
+              <svg viewBox="0 0 24 48">
+                <path d="M12 44V5" />
+                <path d="m5 12 7-7 7 7" />
+              </svg>
+              <span>进阶</span>
+            </div>
+          </div>
+
+          <div id="v2Viewport" class="v2-viewport">
+            <div id="v2World" class="v2-world">
+              <div id="v2TierLayer" class="v2-tier-layer"></div>
+              <svg id="v2ConnectionLayer" class="v2-connection-layer" aria-hidden="true"></svg>
+              <div id="v2NodeLayer" class="v2-node-layer"></div>
+            </div>
+          </div>
+        </section>
+
+        <aside id="v2Detail" class="v2-detail" aria-label="技能详情"></aside>
+      </main>
+    </div>
+
+    <template id="v2EmptyDetail">
+      <div class="v2-empty">
+        <div class="v2-empty-gem" aria-hidden="true"></div>
+        <h2>选择一个技能</h2>
+      </div>
+    </template>
+
+    <script src="skill-tree-v2.js" defer></script>
+  </body>
+</html>

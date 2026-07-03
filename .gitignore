@@ -1,0 +1,4 @@
+github_token.txt
+*.log
+.DS_Store
+node_modules/
