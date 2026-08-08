@@ -30,6 +30,7 @@ http://localhost:8000/skill-tree-v2.html
 - 直接运行 Prompt：`.agents/skills/question-bank-consensus-manager/references/direct-run-prompt.md`
 - 完整管理 Prompt：`.agents/skills/question-bank-consensus-manager/references/manager-prompt.md`
 - 主程序：`.agents/skills/question-bank-consensus-manager/scripts/qb_manager.py`
+- 题库验证器：`question generation/practice-bank-expansion-pack/validate.py`
 
 它会根据是否存在 `OPENAI_API_KEY` 自动选择 OpenAI API 或 Codex CLI，并执行三路独立解题、Teacher 核验、一轮无答案泄漏的分歧重试、`validate.py` 验证、可审计写回、审题网页和可版本化解题 Skill 库。使用时打开“直接运行 Prompt”，替换目标目录列表后整段粘贴到 Codex 客户端即可。
 
