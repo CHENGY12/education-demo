@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["classifications", "questions"],
+  "properties": {
+    "classifications": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "difficulty", "pool"],
+        "properties": {
+          "id": {"type": "string"},
+          "difficulty": {"type": "string", "enum": ["low", "mid", "high"]},
+          "pool": {"type": "string", "enum": ["display", "exam"]}
+        }
+      }
+    },
+    "questions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["difficulty", "pool", "prompt", "options", "answer", "solution", "independent_check", "skillTarget", "hint"],
+        "properties": {
+          "difficulty": {"type": "string", "enum": ["low", "mid", "high"]},
+          "pool": {"type": "string", "enum": ["display", "exam"]},
+          "prompt": {"type": "string"},
+          "options": {
+            "type": "array",
+            "minItems": 4,
+            "maxItems": 4,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["id", "text"],
+              "properties": {
+                "id": {"type": "string", "enum": ["A", "B", "C", "D"]},
+                "text": {"type": "string"}
+              }
+            }
+          },
+          "answer": {"type": "string", "enum": ["A", "B", "C", "D"]},
+          "solution": {"type": "string"},
+          "independent_check": {"type": "string"},
+          "skillTarget": {"type": "string"},
+          "hint": {"type": "string"}
+        }
+      }
+    }
+  }
+}

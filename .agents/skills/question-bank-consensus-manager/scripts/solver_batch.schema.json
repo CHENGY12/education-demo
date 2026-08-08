@@ -1,0 +1,87 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["solutions"],
+  "properties": {
+    "solutions": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "answer",
+          "solution",
+          "independent_check",
+          "question_valid",
+          "confidence",
+          "diagnostic_issue_codes_checked",
+          "diagnostic_focus_codes_checked",
+          "solution_skill_ids_considered"
+        ],
+        "properties": {
+          "id": {"type": "string"},
+          "answer": {"type": "string"},
+          "solution": {"type": "string"},
+          "independent_check": {"type": "string"},
+          "question_valid": {"type": "boolean"},
+          "confidence": {
+            "type": "string",
+            "enum": ["high", "medium", "low"]
+          },
+          "diagnostic_issue_codes_checked": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "misread_condition",
+                "wrong_model",
+                "invalid_assumption",
+                "algebra_error",
+                "arithmetic_error",
+                "sign_direction_error",
+                "unit_dimension_error",
+                "boundary_check_failed",
+                "option_uniqueness_error",
+                "unsupported_conclusion",
+                "contradictory_reasoning",
+                "incomplete_reasoning",
+                "image_interpretation_error",
+                "question_ambiguous",
+                "question_incomplete",
+                "no_unique_answer",
+                "answer_process_mismatch"
+              ]
+            }
+          },
+          "diagnostic_focus_codes_checked": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "reread_conditions",
+                "rebuild_model",
+                "derive_independently",
+                "verify_applicability",
+                "check_algebra",
+                "check_units",
+                "check_signs",
+                "test_boundary_cases",
+                "verify_each_option",
+                "cross_check_second_method",
+                "inspect_image_only",
+                "assess_question_validity"
+              ]
+            }
+          },
+          "solution_skill_ids_considered": {
+            "type": "array",
+            "items": {"type": "string"}
+          }
+        }
+      }
+    }
+  }
+}
