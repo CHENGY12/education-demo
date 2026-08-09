@@ -1,0 +1,74 @@
+{
+  "action": "create",
+  "applicability": [
+    "一维反弹",
+    "二维转向或碰撞",
+    "求平均合力方向",
+    "求某一外力的冲量"
+  ],
+  "description": "统一坐标后逐分量计算动量变化，并从合冲量中分离某一指定外力的冲量。",
+  "generalized": true,
+  "name": "动量变化的矢量建模与外力冲量分离",
+  "novel": true,
+  "novelty_rationale": "现有技能不包含动量矢量和外力冲量分离。",
+  "ordered_steps": [
+    "建立一维正方向或正交坐标系，将初末速度写成带符号量或向量。",
+    "计算动量变化矢量，而非初末速率之差。",
+    "求平均合力时用动量变化除以时间。",
+    "求指定外力时列出全部外力冲量，并从合冲量中移项分离。",
+    "最后合成分量得到大小和方向，避免提前取绝对值。"
+  ],
+  "pitfalls": [
+    "互相垂直的变化量不能直接代数相加",
+    "重力等外力冲量不能遗漏",
+    "列式前取绝对值会丢失方向"
+  ],
+  "related_skill_id": "",
+  "sha256": "5fc54a4dcf138b68f02fa0bd79ebb8745b69b7be3c8eb19decad5ec1a6124793",
+  "skill_id": "solution-bb2e2a72376f",
+  "source": {
+    "consolidator_response_sha256": "7e4ff0b3b410cd3777e90eb05334940a904c8839f8e7f1302b1008d295a79407",
+    "curation_run_id": "skill-history-20260809T020638Z-ee34104f",
+    "evidence_question_keys_sha256": "cc5cc5db34237a019c7b3f9b0caaa812479790e1873e0b0331364b742c6c255f",
+    "final_evidence_question_count": 1886,
+    "kind": "historical_verified_solution_curation",
+    "novelty_required": false,
+    "reuse_rationale": "反弹、转向和多外力题都要求保留速度矢量，用分量计算动量变化并从合冲量中分离指定外力。",
+    "scope_question_count": 2397,
+    "source_node_dirs": [
+      "cn-guangxi-g11-2026/物理/期中测试_0427_8"
+    ],
+    "source_question_keys": [
+      "41d2acaf8f9284b83904a96b8cd1c92ccbb5217305a1641f3ec9e4b4aadc010e",
+      "7565136effc21918314cea005db1022148a413e69fb65a9cf82d023d27e87c38"
+    ],
+    "source_question_snapshot_sha256": {
+      "41d2acaf8f9284b83904a96b8cd1c92ccbb5217305a1641f3ec9e4b4aadc010e": "b61f7c90289d2ec78686e825be8ddf1c6b1917c0a7071c7d57f2a984bcec382a",
+      "7565136effc21918314cea005db1022148a413e69fb65a9cf82d023d27e87c38": "231fa2c84680fd9392daa3312deeef630b25a03456d0699aacedeea16b548734"
+    },
+    "supporting_batches": [
+      "batch-0003"
+    ],
+    "targets": [
+      "cn-guangxi-g11-2026/物理",
+      "cn-nanjing-g11-2026/物理"
+    ]
+  },
+  "tags": [
+    "动量变化",
+    "矢量",
+    "平均力",
+    "冲量分量",
+    "反弹"
+  ],
+  "updated_at": "2026-08-09T02:23:05+00:00",
+  "useful": true,
+  "verification_checks": [
+    "反弹后速度是否与初速度异号",
+    "二维问题是否逐分量核对",
+    "指定外力冲量是否与合冲量混淆",
+    "是否在完成矢量运算后才取模"
+  ],
+  "verification_run_id": "skill-history-20260809T020638Z-ee34104f",
+  "version": 1
+}

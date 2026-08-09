@@ -1,0 +1,76 @@
+{
+  "action": "create",
+  "applicability": [
+    "由瞬时波形和质点运动判断传播方向",
+    "判断质点速度和加速度",
+    "补全波函数时间项",
+    "求固定位置振动方程"
+  ],
+  "description": "用质点速度和波形空间斜率的符号关系判断传播方向，并构造完整行波与定点振动方程。",
+  "generalized": true,
+  "name": "行波的时空导数判向与方程构造",
+  "novel": true,
+  "novelty_rationale": "现有技能不涉及机械波微分判向。",
+  "ordered_steps": [
+    "规定横坐标和位移正方向，从波形提取振幅、波数和空间初相。",
+    "在给定点读取空间斜率和质点速度符号。",
+    "右行波满足时间导数与空间导数异号，左行波满足同号，据此判向。",
+    "写出带正确时间项符号的完整行波方程，并在初始时刻复原波形。",
+    "代入固定位置得到质点振动方程；加速度再由其指向平衡位置判断。"
+  ],
+  "pitfalls": [
+    "波传播速度不是介质质点振动速度",
+    "仅凭位移不能判断传播方向",
+    "斜率为零处通常不能单独用于判向"
+  ],
+  "related_skill_id": "",
+  "sha256": "6b34de78974ead0454c929d154295aa774be4945ef1c60e823c761d734564c17",
+  "skill_id": "solution-881032960a35",
+  "source": {
+    "consolidator_response_sha256": "7e4ff0b3b410cd3777e90eb05334940a904c8839f8e7f1302b1008d295a79407",
+    "curation_run_id": "skill-history-20260809T020638Z-ee34104f",
+    "evidence_question_keys_sha256": "cc5cc5db34237a019c7b3f9b0caaa812479790e1873e0b0331364b742c6c255f",
+    "final_evidence_question_count": 1886,
+    "kind": "historical_verified_solution_curation",
+    "novelty_required": false,
+    "reuse_rationale": "两个批次的行波判向候选实质相同，均以时间导数和空间导数的符号关系连接波形、质点运动与完整方程。",
+    "scope_question_count": 2397,
+    "source_node_dirs": [
+      "cn-guangxi-g11-2026/物理/期中测试_0427_5",
+      "cn-nanjing-g11-2026/物理/12月阶段性检测_5"
+    ],
+    "source_question_keys": [
+      "1fce1082aba01e74b9e3a4f32cd1f410c568267e98ffc358894dea32eb0e08b6",
+      "7e9295380af11895691848359d480fc2c0ef5392d7153fc3ddf67294222b51aa"
+    ],
+    "source_question_snapshot_sha256": {
+      "1fce1082aba01e74b9e3a4f32cd1f410c568267e98ffc358894dea32eb0e08b6": "e0f84b7f45898898e08addc99684beb2c96fd801a6c4ef9ed202d71846794106",
+      "7e9295380af11895691848359d480fc2c0ef5392d7153fc3ddf67294222b51aa": "c80851c6868bb0de0d54c4bed5534db986b62cb6d51f64968c616726755eb9e1"
+    },
+    "supporting_batches": [
+      "batch-0002",
+      "batch-0005"
+    ],
+    "targets": [
+      "cn-guangxi-g11-2026/物理",
+      "cn-nanjing-g11-2026/物理"
+    ]
+  },
+  "tags": [
+    "机械波",
+    "传播方向",
+    "空间斜率",
+    "时空导数",
+    "行波方程"
+  ],
+  "updated_at": "2026-08-09T02:23:05+00:00",
+  "useful": true,
+  "verification_checks": [
+    "初始时刻方程是否还原题给波形",
+    "用于判向点的速度符号是否符合题意",
+    "右行波是否满足速度与空间斜率异号",
+    "相位常量面是否沿判定方向移动"
+  ],
+  "verification_run_id": "skill-history-20260809T020638Z-ee34104f",
+  "version": 1
+}

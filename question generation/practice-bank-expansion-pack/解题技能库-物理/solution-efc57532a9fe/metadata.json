@@ -1,0 +1,74 @@
+{
+  "action": "create",
+  "applicability": [
+    "两列近频波叠加",
+    "求拍频或拍周期",
+    "求首次相消时间",
+    "统计区间内指定合成状态"
+  ],
+  "description": "把相位差视为由频差驱动的线性时钟，统一处理拍、相长相消和时刻计数。",
+  "generalized": true,
+  "name": "近频波叠加的相对相位时钟",
+  "novel": true,
+  "novelty_rationale": "现有技能未覆盖随时间演化的波相位差。",
+  "ordered_steps": [
+    "计算频差并写出相对相位随时间的线性关系。",
+    "把初始同相、反相或一般初相写入相位初值。",
+    "将目标现象翻译成相对相位条件。",
+    "解出满足条件的通项时刻，并按时间区间筛选整数序号。",
+    "区分包络完整重复周期与从相长到首次相消的时间。"
+  ],
+  "pitfalls": [
+    "首次相消时间不是完整拍周期",
+    "不能忽略初始相位",
+    "计数时不能遗漏端点或周期内多解"
+  ],
+  "related_skill_id": "",
+  "sha256": "bb844eadff878e731d79bc92630c65f11a095aeaf5411c28e8776a88d7b0cf74",
+  "skill_id": "solution-efc57532a9fe",
+  "source": {
+    "consolidator_response_sha256": "7e4ff0b3b410cd3777e90eb05334940a904c8839f8e7f1302b1008d295a79407",
+    "curation_run_id": "skill-history-20260809T020638Z-ee34104f",
+    "evidence_question_keys_sha256": "cc5cc5db34237a019c7b3f9b0caaa812479790e1873e0b0331364b742c6c255f",
+    "final_evidence_question_count": 1886,
+    "kind": "historical_verified_solution_curation",
+    "novelty_required": false,
+    "reuse_rationale": "近频叠加题都可将频差转化为线性累积的相对相位，并用同一时钟处理拍周期、首次相消和区间计数。",
+    "scope_question_count": 2397,
+    "source_node_dirs": [
+      "cn-guangxi-g11-2026/物理/期中测试_0427_1"
+    ],
+    "source_question_keys": [
+      "964cdc5fdde088e5a13ab1aeceffe859140754b50fbc2ae0d485e8e9a697c43e",
+      "91ef1b6a918c36dab54d64554eeacf5c1b686f2b0e19560cb6c64745e9ef87ab"
+    ],
+    "source_question_snapshot_sha256": {
+      "91ef1b6a918c36dab54d64554eeacf5c1b686f2b0e19560cb6c64745e9ef87ab": "14f25b09cf561c3f96ef11e4f6312c765377878250430f7afcf357938773d442",
+      "964cdc5fdde088e5a13ab1aeceffe859140754b50fbc2ae0d485e8e9a697c43e": "d64d86cef1a49e4e1ba55b90147bdfb6b92d3635c08ac0d0c467080a0a379003"
+    },
+    "supporting_batches": [
+      "batch-0002"
+    ],
+    "targets": [
+      "cn-guangxi-g11-2026/物理",
+      "cn-nanjing-g11-2026/物理"
+    ]
+  },
+  "tags": [
+    "波的叠加",
+    "拍现象",
+    "频差",
+    "相对相位",
+    "周期计数"
+  ],
+  "updated_at": "2026-08-09T02:23:05+00:00",
+  "useful": true,
+  "verification_checks": [
+    "一个拍周期后相对相位是否增加整周",
+    "首次由同相到完全相消是否对应半周相对相位",
+    "区间端点是否按题意处理",
+    "拍频是否显著小于载波频率"
+  ],
+  "verification_run_id": "skill-history-20260809T020638Z-ee34104f",
+  "version": 1
+}

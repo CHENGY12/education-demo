@@ -1,0 +1,83 @@
+{
+  "action": "create",
+  "applicability": [
+    "辨析扩散与布朗运动",
+    "解释均匀混合后的动态平衡",
+    "比较不同温度或粒径下的布朗运动",
+    "判读离散位置记录图"
+  ],
+  "description": "从观察对象、宏微观层级、采样尺度和控制变量出发，解释扩散、动态平衡及布朗运动记录。",
+  "generalized": true,
+  "name": "热运动、扩散与布朗记录的层级判读",
+  "novel": true,
+  "novelty_rationale": "现有技能只覆盖几何光学和作图误差，未覆盖分子运动层级及随机记录证据边界。",
+  "ordered_steps": [
+    "先确定观察对象是分子、悬浮微粒还是宏观浓度分布。",
+    "将扩散解释为分子热运动造成的统计混合，将布朗运动解释为分子碰撞瞬时不平衡造成的微粒运动。",
+    "把宏观均匀表述为相反方向统计通量相抵，而非微观运动停止。",
+    "比较记录图前统一实际长度标尺和取样间隔，并把连线仅视为离散采样表示。",
+    "比较温度或粒径影响时控制介质、尺度、对流和机械振动等混杂因素。"
+  ],
+  "pitfalls": [
+    "显微镜中可见的通常不是液体分子",
+    "净位移方向不能证明全时段存在同向合力",
+    "大颗粒并不因碰撞次数多就必然有更明显的布朗运动"
+  ],
+  "related_skill_id": "",
+  "sha256": "1be6312c005650598a0053e7fb54b7835834c35db458577117aab1d03dbaf704",
+  "skill_id": "solution-7fc325f8dd2d",
+  "source": {
+    "consolidator_response_sha256": "7e4ff0b3b410cd3777e90eb05334940a904c8839f8e7f1302b1008d295a79407",
+    "curation_run_id": "skill-history-20260809T020638Z-ee34104f",
+    "evidence_question_keys_sha256": "cc5cc5db34237a019c7b3f9b0caaa812479790e1873e0b0331364b742c6c255f",
+    "final_evidence_question_count": 1886,
+    "kind": "historical_verified_solution_curation",
+    "novelty_required": false,
+    "reuse_rationale": "多个批次共同要求区分微观热运动、宏观扩散、悬浮微粒布朗运动及离散记录图的证据边界，适合合并为同一层级判读方法。",
+    "scope_question_count": 2397,
+    "source_node_dirs": [
+      "cn-guangxi-g11-2026/物理/月考测试_0512_1",
+      "cn-nanjing-g11-2026/物理/5月期中检测_5",
+      "cn-nanjing-g11-2026/物理/期末考试_6"
+    ],
+    "source_question_keys": [
+      "4177b082693721e15b77e124d9cccb05cd28716887868339c1ee2823e0239f99",
+      "edffedbefd56052b026f77e5910aa14991c93bc28df917fc7428cf063c2b4bb6",
+      "2857ac49afe4f83692d254a329c0cf7767eee7c12ea86449ae9c2d5bb21e2a28",
+      "bd8180fb70fee2ccee5fac38ce91377c4c87bf2e264ef5f2908a27912e133ecc"
+    ],
+    "source_question_snapshot_sha256": {
+      "2857ac49afe4f83692d254a329c0cf7767eee7c12ea86449ae9c2d5bb21e2a28": "d274d0de9677acf738af40b5e6ed49f6ebe321421ff082a92a66cf601509919b",
+      "4177b082693721e15b77e124d9cccb05cd28716887868339c1ee2823e0239f99": "fda73ce36f623488d1311bb243b6ef3a315e0e72977c65886cfb088e9c95cd10",
+      "bd8180fb70fee2ccee5fac38ce91377c4c87bf2e264ef5f2908a27912e133ecc": "ea567cc1466eb5a44e9f56b2b2da8c1f08c6ece4515b9873348603a85808e997",
+      "edffedbefd56052b026f77e5910aa14991c93bc28df917fc7428cf063c2b4bb6": "dc37afc8fa69fd72d79d70b1fa80844c0079ec1148ac0500725482c15d665448"
+    },
+    "supporting_batches": [
+      "batch-0001",
+      "batch-0007",
+      "batch-0010"
+    ],
+    "targets": [
+      "cn-guangxi-g11-2026/物理",
+      "cn-nanjing-g11-2026/物理"
+    ]
+  },
+  "tags": [
+    "分子动理论",
+    "扩散",
+    "布朗运动",
+    "动态平衡",
+    "离散采样"
+  ],
+  "updated_at": "2026-08-09T02:23:05+00:00",
+  "useful": true,
+  "verification_checks": [
+    "扩散和布朗运动的运动主体是否混淆",
+    "是否把宏观稳定误写成微观静止",
+    "是否把采样折线当成真实轨迹",
+    "比较图像时长度尺度和取样时间是否一致",
+    "是否排除了搅拌、对流和显示放大"
+  ],
+  "verification_run_id": "skill-history-20260809T020638Z-ee34104f",
+  "version": 1
+}

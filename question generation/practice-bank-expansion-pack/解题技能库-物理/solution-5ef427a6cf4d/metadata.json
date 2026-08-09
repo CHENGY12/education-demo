@@ -1,0 +1,78 @@
+{
+  "action": "create",
+  "applicability": [
+    "人在船或车内移动",
+    "物体在可动板上运动",
+    "可动支座摆系统",
+    "由相对位移求各部分对地位移"
+  ],
+  "description": "对内部相对运动系统，根据所求量选择水平动量、质心运动和机械能关系。",
+  "generalized": true,
+  "name": "无水平外力系统的动量—质心—相对位移建模",
+  "novel": true,
+  "novelty_rationale": "现有技能没有质心和内部相对运动建模。",
+  "ordered_steps": [
+    "选取完整系统并确认水平方向外力或外冲量可忽略。",
+    "统一参考系和正方向，区分各部分对地速度、位移及相对量。",
+    "求瞬时速度时使用水平总动量守恒；涉及势能转化时再配合机械能。",
+    "求全过程位移时先由初始总动量确定质心运动，再列质量加权位移关系。",
+    "用相对位移等于两对地位移之差补充方程并联立。"
+  ],
+  "pitfalls": [
+    "相对速度不能直接代入系统动量或动能",
+    "相对载体位移不是对地位移",
+    "求位移通常不必进行时间积分"
+  ],
+  "related_skill_id": "",
+  "sha256": "fc2ab6c6c02ece0bde3ab5baa2d8aae3c940936a8e0cbd90dc8b789ecc80b90f",
+  "skill_id": "solution-5ef427a6cf4d",
+  "source": {
+    "consolidator_response_sha256": "7e4ff0b3b410cd3777e90eb05334940a904c8839f8e7f1302b1008d295a79407",
+    "curation_run_id": "skill-history-20260809T020638Z-ee34104f",
+    "evidence_question_keys_sha256": "cc5cc5db34237a019c7b3f9b0caaa812479790e1873e0b0331364b742c6c255f",
+    "final_evidence_question_count": 1886,
+    "kind": "historical_verified_solution_curation",
+    "novelty_required": false,
+    "reuse_rationale": "可动支座和人船模型均依赖水平质心运动与相对位移关系；前者的速度题再接动量和能量，可合并成更通用框架。",
+    "scope_question_count": 2397,
+    "source_node_dirs": [
+      "cn-nanjing-g11-2026/物理/10月阶段性检测_10",
+      "cn-nanjing-g11-2026/物理/期末学情调研_10"
+    ],
+    "source_question_keys": [
+      "13e46d8627e853f7fcf22e6ccf93ef456b1d8a5d33dcf8293a1df32981d2aa3b",
+      "ef3710b03c64e6b5afb0a00c95d85616d36e424b1b543bc1e71f43c227c13532",
+      "5728c84efbd5943f00b57284fd2595b01a77ca24bde03b876494827fdf9366d6"
+    ],
+    "source_question_snapshot_sha256": {
+      "13e46d8627e853f7fcf22e6ccf93ef456b1d8a5d33dcf8293a1df32981d2aa3b": "ed0398b882000d75f80c650a6378a3a7122f11e6fe06865ca22d89576752124c",
+      "5728c84efbd5943f00b57284fd2595b01a77ca24bde03b876494827fdf9366d6": "184dfa1c2d3e851f93ad4f7e428d1ac3dd4af3d8ddf87e16b9857e95399b081f",
+      "ef3710b03c64e6b5afb0a00c95d85616d36e424b1b543bc1e71f43c227c13532": "16111fd63c64f347dd4e041b935cea3f00bd389a0c36df6c4c17edaf9e00c15a"
+    },
+    "supporting_batches": [
+      "batch-0003",
+      "batch-0008"
+    ],
+    "targets": [
+      "cn-guangxi-g11-2026/物理",
+      "cn-nanjing-g11-2026/物理"
+    ]
+  },
+  "tags": [
+    "质心",
+    "动量守恒",
+    "相对位移",
+    "可动支座",
+    "参考系"
+  ],
+  "updated_at": "2026-08-09T02:23:05+00:00",
+  "useful": true,
+  "verification_checks": [
+    "所有速度和位移是否属于同一参考系",
+    "初始总动量非零时是否保留质心整体平移",
+    "初始静止时质量加权位移和是否为零",
+    "相对位移代回后是否符合题意"
+  ],
+  "verification_run_id": "skill-history-20260809T020638Z-ee34104f",
+  "version": 1
+}

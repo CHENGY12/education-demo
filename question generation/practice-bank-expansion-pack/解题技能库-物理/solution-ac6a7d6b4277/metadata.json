@@ -1,0 +1,74 @@
+{
+  "action": "create",
+  "applicability": [
+    "两物体由轻弹簧连接",
+    "求最大弹性势能",
+    "求速度极值",
+    "求再次原长时速度"
+  ],
+  "description": "把孤立双物体弹簧系统分解为恒定质心平动和可与弹性势能互换的相对运动。",
+  "generalized": true,
+  "name": "双物体弹簧系统的质心—相对运动分解",
+  "novel": true,
+  "novelty_rationale": "现有技能不涉及耦合弹簧系统分解。",
+  "ordered_steps": [
+    "从外部约束解除后重新选系统，记录总动量、机械能和初始形变量。",
+    "由总动量求恒定质心速度，将质心平动能作为不可转化的能量底座。",
+    "最大形变时相对速度为零，两物体共速，弹性势能最大。",
+    "用总机械能减质心平动能求最大弹性势能。",
+    "弹簧回到相同形变量时联立总动量和机械能，并按运动连续性选择相对速度分支。"
+  ],
+  "pitfalls": [
+    "仍受墙或挡板时不能擅用系统动量守恒",
+    "总机械能不能全部转化为弹性势能",
+    "仅用能量方程无法唯一确定速度分支"
+  ],
+  "related_skill_id": "",
+  "sha256": "0eb7ff0b053587be7829a585c2828b62780b8b0e65e6d3110c37d4a6d557d15f",
+  "skill_id": "solution-ac6a7d6b4277",
+  "source": {
+    "consolidator_response_sha256": "7e4ff0b3b410cd3777e90eb05334940a904c8839f8e7f1302b1008d295a79407",
+    "curation_run_id": "skill-history-20260809T020638Z-ee34104f",
+    "evidence_question_keys_sha256": "cc5cc5db34237a019c7b3f9b0caaa812479790e1873e0b0331364b742c6c255f",
+    "final_evidence_question_count": 1886,
+    "kind": "historical_verified_solution_curation",
+    "novelty_required": false,
+    "reuse_rationale": "耦合弹簧题反复利用质心平动能不可转化、最大形变时共速以及再次原长时相对速度反向。",
+    "scope_question_count": 2397,
+    "source_node_dirs": [
+      "cn-nanjing-g11-2026/物理/10月阶段性检测_14"
+    ],
+    "source_question_keys": [
+      "64407e5446bd6231fac1ac20158a9f2b3b9e108c1f03fe71e8c5d92507d6b9c5",
+      "93c312f99e7decf17db59f42e3e0c00999b0e7b7dd96f12ad3193c8d82c5a01a"
+    ],
+    "source_question_snapshot_sha256": {
+      "64407e5446bd6231fac1ac20158a9f2b3b9e108c1f03fe71e8c5d92507d6b9c5": "53b0fa1716776fc96c56bc2dd0bf51873c4b3e9d2a72c74143ab635b40c4005d",
+      "93c312f99e7decf17db59f42e3e0c00999b0e7b7dd96f12ad3193c8d82c5a01a": "b0789652f8dace7fe625709e2082a22550576ee044d69b82d0452b45ed3d7bae"
+    },
+    "supporting_batches": [
+      "batch-0003"
+    ],
+    "targets": [
+      "cn-guangxi-g11-2026/物理",
+      "cn-nanjing-g11-2026/物理"
+    ]
+  },
+  "tags": [
+    "双物体",
+    "弹簧耦合",
+    "质心运动",
+    "相对运动",
+    "最大弹性势能"
+  ],
+  "updated_at": "2026-08-09T02:23:05+00:00",
+  "useful": true,
+  "verification_checks": [
+    "动量守恒起点是否在外部约束消失后",
+    "最大形变条件是否为共速而非都静止",
+    "最大势能是否扣除了质心动能",
+    "再次原长结果是否同时满足动量和能量"
+  ],
+  "verification_run_id": "skill-history-20260809T020638Z-ee34104f",
+  "version": 1
+}

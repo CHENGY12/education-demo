@@ -1,0 +1,73 @@
+{
+  "action": "create",
+  "applicability": [
+    "由频率变化反求电感或电容",
+    "由初始电流求最大电荷或电压",
+    "比较不同电源或铁芯条件下的振荡",
+    "分析切换前直流稳态"
+  ],
+  "description": "区分由电感电容决定的固有频率和由切换瞬间状态决定的振幅及总能量。",
+  "generalized": true,
+  "name": "LC振荡的固有频率与初始能量分层",
+  "novel": true,
+  "novelty_rationale": "现有技能未覆盖LC参数与初态能量的分层。",
+  "ordered_steps": [
+    "先求切换前稳态，记录电感电流和电容电压的连续初值。",
+    "用电感和电容的乘积确定周期或频率。",
+    "写出理想回路总能量，并在纯磁能与纯电能极值状态间转换。",
+    "由能量守恒建立最大电流、最大电荷和最大电压关系。",
+    "逐项标记条件变化影响的是电感、电容还是初始能量，避免跨层混用。"
+  ],
+  "pitfalls": [
+    "电源电压不直接决定固有频率",
+    "最大电荷不能不看初态就写成电容乘电源电压",
+    "频率比例不能漏掉平方根"
+  ],
+  "related_skill_id": "",
+  "sha256": "9b556094baa7ebcc06692c4644872bfe6cb12dc4de414ee8f4dc210cbebb2f96",
+  "skill_id": "solution-0df4ca11598b",
+  "source": {
+    "consolidator_response_sha256": "7e4ff0b3b410cd3777e90eb05334940a904c8839f8e7f1302b1008d295a79407",
+    "curation_run_id": "skill-history-20260809T020638Z-ee34104f",
+    "evidence_question_keys_sha256": "cc5cc5db34237a019c7b3f9b0caaa812479790e1873e0b0331364b742c6c255f",
+    "final_evidence_question_count": 1886,
+    "kind": "historical_verified_solution_curation",
+    "novelty_required": false,
+    "reuse_rationale": "多道LC参数题共同要求把固有频率与由切换初态决定的振幅、最大电荷和总能量分层处理。",
+    "scope_question_count": 2397,
+    "source_node_dirs": [
+      "cn-nanjing-g11-2026/物理/4月阶段性检测_6"
+    ],
+    "source_question_keys": [
+      "bdfc235bb69648ab0cbaa20fce8374050342d7a36f1623fa783d75d3590e73a6",
+      "6dd0ae2c5e29ef4afd9ba56bdad2c931617c946c9bc051bf5a0db503aefda3c1"
+    ],
+    "source_question_snapshot_sha256": {
+      "6dd0ae2c5e29ef4afd9ba56bdad2c931617c946c9bc051bf5a0db503aefda3c1": "98a4a7e49fbfbb1d8561b6af158355bd0c05b75615e1a172facf9003b78f1ff7",
+      "bdfc235bb69648ab0cbaa20fce8374050342d7a36f1623fa783d75d3590e73a6": "e8d6372840d90ffb9c34a0c7ec15bb17d08abff5660218e945d74f3af5f1d8e4"
+    },
+    "supporting_batches": [
+      "batch-0006"
+    ],
+    "targets": [
+      "cn-guangxi-g11-2026/物理",
+      "cn-nanjing-g11-2026/物理"
+    ]
+  },
+  "tags": [
+    "LC振荡",
+    "固有频率",
+    "初始条件",
+    "能量守恒"
+  ],
+  "updated_at": "2026-08-09T02:23:05+00:00",
+  "useful": true,
+  "verification_checks": [
+    "只改变电源而电感电容不变时频率是否不变",
+    "电感增大时频率是否降低",
+    "极值状态的能量是否相等",
+    "切换瞬间电感电流和电容电压是否连续"
+  ],
+  "verification_run_id": "skill-history-20260809T020638Z-ee34104f",
+  "version": 1
+}

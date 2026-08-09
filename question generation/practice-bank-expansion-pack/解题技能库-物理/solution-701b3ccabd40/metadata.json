@@ -1,0 +1,81 @@
+{
+  "action": "create",
+  "applicability": [
+    "变压器与串联电阻组合",
+    "含线路电阻的输电负载",
+    "副边端口伏安关系",
+    "负载或匝数比的最大功率优化"
+  ],
+  "description": "将跨侧纯电阻折算到同一侧，把变压器网络化为普通串并联或戴维南电路。",
+  "generalized": true,
+  "name": "理想变压器网络的同侧负载折算",
+  "novel": true,
+  "novelty_rationale": "现有技能不涉及交流电路或阻抗折算。",
+  "ordered_steps": [
+    "统一定义匝数比方向并选定等效侧。",
+    "按匝数比平方将另一侧电阻折算到等效侧。",
+    "在等效侧重画普通电阻网络，求电流、压降和功率。",
+    "需要跨回另一侧时再使用电压正比于匝数、电流反比于匝数的关系。",
+    "负载可变时建立端口等效内阻；求最大功率先找无约束匹配点，再检查可行范围。"
+  ],
+  "pitfalls": [
+    "电阻不能按匝数比一次方折算",
+    "副边电阻不能直接与原边电阻相加",
+    "最大功率、最高效率和最小线损不是同一条件"
+  ],
+  "related_skill_id": "",
+  "sha256": "781531f3a74149bd96ee6bb0d4ef89a8516909d64f85a3910b3b791680b59626",
+  "skill_id": "solution-701b3ccabd40",
+  "source": {
+    "consolidator_response_sha256": "7e4ff0b3b410cd3777e90eb05334940a904c8839f8e7f1302b1008d295a79407",
+    "curation_run_id": "skill-history-20260809T020638Z-ee34104f",
+    "evidence_question_keys_sha256": "cc5cc5db34237a019c7b3f9b0caaa812479790e1873e0b0331364b742c6c255f",
+    "final_evidence_question_count": 1886,
+    "kind": "historical_verified_solution_curation",
+    "novelty_required": false,
+    "reuse_rationale": "三个批次的变压器候选实质相同，均以匝数比平方折算负载，并在单侧等效电路中处理串联电阻、输电线和最大功率。",
+    "scope_question_count": 2397,
+    "source_node_dirs": [
+      "cn-guangxi-g11-2026/物理/月考测试_0512_10",
+      "cn-nanjing-g11-2026/物理/4月阶段性检测_10",
+      "cn-nanjing-g11-2026/物理/5月期中检测_8"
+    ],
+    "source_question_keys": [
+      "d738acce0d0c972bf48d89eb8fcbf61197b4bcbcec4941c846992d3a71dec919",
+      "d7e10f49ca5d278857d2758814e0c48095c983600b45cfe0e9723d7c546da1a8",
+      "95fc2127ab6a5b706e533712e22d5143d0b1b07c9d3ca05494f7ac41f00b4e55"
+    ],
+    "source_question_snapshot_sha256": {
+      "95fc2127ab6a5b706e533712e22d5143d0b1b07c9d3ca05494f7ac41f00b4e55": "17ccd478ba4766a270797e60cffc8bd3b3914934c1465dc7542ea29570b57fed",
+      "d738acce0d0c972bf48d89eb8fcbf61197b4bcbcec4941c846992d3a71dec919": "c6d401b414ff658324ae9ec30d19765437a4b0b2706c4e4e0186d799c06bb073",
+      "d7e10f49ca5d278857d2758814e0c48095c983600b45cfe0e9723d7c546da1a8": "df243ea84028d23ef2cca6131ef66a2bd420b35fabe1f7603ac32c99d81c56ee"
+    },
+    "supporting_batches": [
+      "batch-0001",
+      "batch-0005",
+      "batch-0007"
+    ],
+    "targets": [
+      "cn-guangxi-g11-2026/物理",
+      "cn-nanjing-g11-2026/物理"
+    ]
+  },
+  "tags": [
+    "理想变压器",
+    "阻抗折算",
+    "等效电路",
+    "最大功率",
+    "输电"
+  ],
+  "updated_at": "2026-08-09T02:23:05+00:00",
+  "useful": true,
+  "verification_checks": [
+    "电阻折算方向和平方因子是否正确",
+    "电压、电流是否属于同一侧",
+    "是否扣除了线路或串联电阻压降",
+    "折算前后负载功率是否一致",
+    "最优点是否满足变量范围"
+  ],
+  "verification_run_id": "skill-history-20260809T020638Z-ee34104f",
+  "version": 1
+}

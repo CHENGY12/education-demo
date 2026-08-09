@@ -1,0 +1,77 @@
+{
+  "action": "create",
+  "applicability": [
+    "评价对照实验方案",
+    "比较温度、尺寸或材料影响",
+    "识别对流、搅拌和测量尺度干扰",
+    "判断实验结论的因果强度"
+  ],
+  "description": "先建立自变量、响应量和控制量，再检查比较组能否支持单因素因果结论。",
+  "generalized": true,
+  "name": "比较实验的单变量因果判定与混杂排除",
+  "novel": true,
+  "novelty_rationale": "现有方向误差技能不包含实验因果识别和混杂控制框架。",
+  "ordered_steps": [
+    "明确研究的自变量及实际观测的响应量。",
+    "列出所有可能改变响应量的其他因素，标记主要混杂变量。",
+    "检查比较组是否只改变目标变量，测量方式和关键环境是否一致。",
+    "针对主要干扰设置稳定、隔离、校准或成对对照措施。",
+    "若仍有多个因素同时变化，只报告综合效应，不反推单因素贡献。"
+  ],
+  "pitfalls": [
+    "不搅拌不等于没有对流",
+    "最终状态相同不能推出过程速率相同",
+    "显示尺度改变不代表物理效应增强"
+  ],
+  "related_skill_id": "",
+  "sha256": "423b346ea675495919adf3c2c83b98d9b485d1173764082d49e4869c40ce1a92",
+  "skill_id": "solution-1f2ffe79893f",
+  "source": {
+    "consolidator_response_sha256": "7e4ff0b3b410cd3777e90eb05334940a904c8839f8e7f1302b1008d295a79407",
+    "curation_run_id": "skill-history-20260809T020638Z-ee34104f",
+    "evidence_question_keys_sha256": "cc5cc5db34237a019c7b3f9b0caaa812479790e1873e0b0331364b742c6c255f",
+    "final_evidence_question_count": 1886,
+    "kind": "historical_verified_solution_curation",
+    "novelty_required": false,
+    "reuse_rationale": "多类比较实验都必须识别自变量、响应量和可能模拟目标效应的混杂因素，方法可跨实验主题复用。",
+    "scope_question_count": 2397,
+    "source_node_dirs": [
+      "cn-guangxi-g11-2026/物理/月考测试_0512_1",
+      "cn-nanjing-g11-2026/物理/5月期中检测_5"
+    ],
+    "source_question_keys": [
+      "e1f3c33dbf56427aab8f1a160f59f26e4c51e3e672a19b01ca79f6cb4e65538b",
+      "b61715a045630f9889b20e2444a69b2c21e68285615f0f959f1f1c6f2ccb32fe",
+      "f21f12b7908208e7526e16c1dab3d428cfd378bde8b8c9f1b6dbf6bafc57adb2"
+    ],
+    "source_question_snapshot_sha256": {
+      "b61715a045630f9889b20e2444a69b2c21e68285615f0f959f1f1c6f2ccb32fe": "abc4a3fb4a2f110355627185cecb98033d096663b63e436639017f5bae92ee4f",
+      "e1f3c33dbf56427aab8f1a160f59f26e4c51e3e672a19b01ca79f6cb4e65538b": "0188cf549567627e92f67e7992dd8bfec0c640d0cefb26d630e6534967b23782",
+      "f21f12b7908208e7526e16c1dab3d428cfd378bde8b8c9f1b6dbf6bafc57adb2": "1cbb6adca77c5235ed3781bcac28348748763ecf73ded0700069b2eb496dcd0a"
+    },
+    "supporting_batches": [
+      "batch-0001",
+      "batch-0007"
+    ],
+    "targets": [
+      "cn-guangxi-g11-2026/物理",
+      "cn-nanjing-g11-2026/物理"
+    ]
+  },
+  "tags": [
+    "控制变量",
+    "实验设计",
+    "因果推断",
+    "混杂因素"
+  ],
+  "updated_at": "2026-08-09T02:23:05+00:00",
+  "useful": true,
+  "verification_checks": [
+    "比较组是否同时改变多个关键因素",
+    "响应量是否真正对应目标现象",
+    "抑制干扰措施是否对各组一致",
+    "是否把相关性直接写成因果性"
+  ],
+  "verification_run_id": "skill-history-20260809T020638Z-ee34104f",
+  "version": 1
+}

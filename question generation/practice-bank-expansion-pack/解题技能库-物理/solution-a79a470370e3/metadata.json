@@ -1,0 +1,74 @@
+{
+  "action": "create",
+  "applicability": [
+    "两波源从两端相向传播",
+    "由首次起振和振幅改变求波速",
+    "由到达时间反演质点位置",
+    "处理左右镜像多解"
+  ],
+  "description": "把振动状态突变识别为波前到达事件，利用两次到达时间和源间距反演波速及位置。",
+  "generalized": true,
+  "name": "双波源波前到达事件的时距反演",
+  "novel": true,
+  "novelty_rationale": "现有技能未覆盖传播事件反演。",
+  "ordered_steps": [
+    "把首次起振识别为先到波前，把首次振幅改变识别为另一波前到达。",
+    "将较早、较晚到达时间分别乘波速表示到较近、较远波源的距离。",
+    "利用质点位于两源之间，使两段距离之和等于源间距，先求波速。",
+    "再求质点到两源或中点的距离。",
+    "若未指定靠近哪一端，保留关于中点对称的位置分支。"
+  ],
+  "pitfalls": [
+    "振幅改变不是质点自身到达极值",
+    "求波速使用到达时间之和而非差",
+    "未标明一侧时不能擅自固定位置"
+  ],
+  "related_skill_id": "",
+  "sha256": "4d333b2fd9d2d08d871918efad12278fb0e404769659b2b4c59a3a8cd6f87ee7",
+  "skill_id": "solution-a79a470370e3",
+  "source": {
+    "consolidator_response_sha256": "7e4ff0b3b410cd3777e90eb05334940a904c8839f8e7f1302b1008d295a79407",
+    "curation_run_id": "skill-history-20260809T020638Z-ee34104f",
+    "evidence_question_keys_sha256": "cc5cc5db34237a019c7b3f9b0caaa812479790e1873e0b0331364b742c6c255f",
+    "final_evidence_question_count": 1886,
+    "kind": "historical_verified_solution_curation",
+    "novelty_required": false,
+    "reuse_rationale": "双波源传播记录题均把首次起振和后续振幅改变解释为两个波前先后到达，再反演位置与波速。",
+    "scope_question_count": 2397,
+    "source_node_dirs": [
+      "cn-guangxi-g11-2026/物理/期中测试_0427_10"
+    ],
+    "source_question_keys": [
+      "b4e102deac241f6abf2a5e3f3ae03b254c5a0bc415faba9d639e0c9daffeca21",
+      "3733b4234b06e49dda6d1b5ad8b88f2145e89cb54940ab0c2a013b92b353b7a9"
+    ],
+    "source_question_snapshot_sha256": {
+      "3733b4234b06e49dda6d1b5ad8b88f2145e89cb54940ab0c2a013b92b353b7a9": "dc3999c233bf877fcfd979e4ee8c06755bd8bd0b96e13ca6808f8a69d73fcd06",
+      "b4e102deac241f6abf2a5e3f3ae03b254c5a0bc415faba9d639e0c9daffeca21": "532c81c220e748089a533e3dee1c4a796306a13f0b0d39fd08bcc21cc7428e30"
+    },
+    "supporting_batches": [
+      "batch-0002"
+    ],
+    "targets": [
+      "cn-guangxi-g11-2026/物理",
+      "cn-nanjing-g11-2026/物理"
+    ]
+  },
+  "tags": [
+    "机械波",
+    "波前到达",
+    "时距反演",
+    "双波源",
+    "镜像多解"
+  ],
+  "updated_at": "2026-08-09T02:23:05+00:00",
+  "useful": true,
+  "verification_checks": [
+    "两传播距离之和是否等于源间距",
+    "首次到达是否对应较短距离",
+    "位置是否落在两源之间",
+    "镜像对称是否被无依据地舍弃"
+  ],
+  "verification_run_id": "skill-history-20260809T020638Z-ee34104f",
+  "version": 1
+}

@@ -1,0 +1,79 @@
+{
+  "action": "create",
+  "applicability": [
+    "平方、倒数或相除后的实验作图",
+    "固定零点偏差或比例误差",
+    "理想气体状态方程线性化",
+    "由图线比较样品量或物理参数"
+  ],
+  "description": "严格按实际坐标和测量变换推导线性式，用斜率提取参数、用截距识别加性偏差。",
+  "generalized": true,
+  "name": "含系统偏差关系的线性化与斜截距解码",
+  "novel": true,
+  "novelty_rationale": "现有技能未包含代数线性化及斜截距参数解码。",
+  "ordered_steps": [
+    "写出完整真实物理关系及测量值与真值的变换关系。",
+    "消去真值，严格改写成题目实际横纵轴变量的一次式。",
+    "与标准直线式逐项对应斜率、截距和单位。",
+    "识别加性误差通常进入截距，比例误差通常缩放斜率；变量经过平方时倍率也要平方。",
+    "用差分求斜率；条件或样品量改变后为新阶段建立新的常量关系。"
+  ],
+  "pitfalls": [
+    "不能凭熟悉公式直接读取斜率",
+    "看到倒数坐标不应自动判为双曲线",
+    "零点偏差与比例误差的图像效应不同"
+  ],
+  "related_skill_id": "",
+  "sha256": "586348a5e3ecd1beeab5d513d7614ab18f619396e31ec4ae40ae3ada023ca2e2",
+  "skill_id": "solution-c086c4dd31ea",
+  "source": {
+    "consolidator_response_sha256": "7e4ff0b3b410cd3777e90eb05334940a904c8839f8e7f1302b1008d295a79407",
+    "curation_run_id": "skill-history-20260809T020638Z-ee34104f",
+    "evidence_question_keys_sha256": "cc5cc5db34237a019c7b3f9b0caaa812479790e1873e0b0331364b742c6c255f",
+    "final_evidence_question_count": 1886,
+    "kind": "historical_verified_solution_curation",
+    "novelty_required": false,
+    "reuse_rationale": "一般实验图像和气体状态图像候选都要求从真实关系及测量变换重新推导一次式，再解释斜率和截距。",
+    "scope_question_count": 2397,
+    "source_node_dirs": [
+      "cn-guangxi-g11-2026/物理/期中测试_0427_11",
+      "cn-nanjing-g11-2026/物理/5月期中检测_11"
+    ],
+    "source_question_keys": [
+      "3374040805417a938f99b75f73d6cc541d36dbd96ee7acdbf45e4593b59fd2a3",
+      "2f2135a79c011846e5497e27e19d7e3bde17b41035b0b23e479c87b4fddaf1fe",
+      "d588a935c16cb6173c5e8bf45715a3c4cf99c3c2e49a65f192cb011f24eac486"
+    ],
+    "source_question_snapshot_sha256": {
+      "2f2135a79c011846e5497e27e19d7e3bde17b41035b0b23e479c87b4fddaf1fe": "6d46efee5cc37e7deaf1633e6eef2f226b73632627ed3527a7f10cae9aa5dda8",
+      "3374040805417a938f99b75f73d6cc541d36dbd96ee7acdbf45e4593b59fd2a3": "24cf641101fb4d349b51f75414aaf91092ffa48e8aa6b13b76803a9c04879a5d",
+      "d588a935c16cb6173c5e8bf45715a3c4cf99c3c2e49a65f192cb011f24eac486": "5cfdb0173097b0c2d1492491479a3f17b3ffdb6cfa59ee3670b59d5be29dbacd"
+    },
+    "supporting_batches": [
+      "batch-0002",
+      "batch-0007"
+    ],
+    "targets": [
+      "cn-guangxi-g11-2026/物理",
+      "cn-nanjing-g11-2026/物理"
+    ]
+  },
+  "tags": [
+    "实验线性化",
+    "斜率",
+    "截距",
+    "系统误差",
+    "变量变换"
+  ],
+  "updated_at": "2026-08-09T02:23:05+00:00",
+  "useful": true,
+  "verification_checks": [
+    "横纵坐标是否与推导式一致",
+    "斜率单位是否符合物理含义",
+    "非零截距时是否避免单点纵横比",
+    "加性和乘性误差是否正确归位",
+    "比较斜率前控制条件是否一致"
+  ],
+  "verification_run_id": "skill-history-20260809T020638Z-ee34104f",
+  "version": 1
+}

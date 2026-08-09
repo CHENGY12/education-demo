@@ -1,0 +1,74 @@
+{
+  "action": "create",
+  "applicability": [
+    "半圆介质直径面入射",
+    "求圆弧面入射角",
+    "判断全反射临界位置",
+    "求允许区间或概率"
+  ],
+  "description": "利用圆弧法线沿半径，把内部光线到圆心的垂距转化为圆弧入射角及临界位置。",
+  "generalized": true,
+  "name": "圆弧界面光路的圆心垂距不变量",
+  "novel": true,
+  "novelty_rationale": "虽与现有辅助圆技能同属圆几何，但本方法利用点到光线垂距处理圆弧入射和全反射，实质不同。",
+  "ordered_steps": [
+    "先在平面界面使用折射定律求介质内光线方向。",
+    "把直径入射点写成相对圆心的有符号位置。",
+    "计算圆心到内部光线所在直线的垂距。",
+    "利用圆弧法线沿半径，使该垂距等于圆半径乘圆弧入射角的正弦。",
+    "与临界角条件联立，转化为位置边界或不等式。"
+  ],
+  "pitfalls": [
+    "直接求圆弧交点容易产生冗长多根",
+    "内部方向角的正弦余弦不能写反",
+    "临界等号不能误称为已经全反射"
+  ],
+  "related_skill_id": "",
+  "sha256": "49285b08e3b79ab8f901d640ad1a21c61b06fdeb10854b95ccc60c5f6ba96727",
+  "skill_id": "solution-90bf3a335d72",
+  "source": {
+    "consolidator_response_sha256": "7e4ff0b3b410cd3777e90eb05334940a904c8839f8e7f1302b1008d295a79407",
+    "curation_run_id": "skill-history-20260809T020638Z-ee34104f",
+    "evidence_question_keys_sha256": "cc5cc5db34237a019c7b3f9b0caaa812479790e1873e0b0331364b742c6c255f",
+    "final_evidence_question_count": 1886,
+    "kind": "historical_verified_solution_curation",
+    "novelty_required": false,
+    "reuse_rationale": "半圆介质题可共同利用圆心到内部光线的垂距，将圆弧入射角和临界条件直接联立。",
+    "scope_question_count": 2397,
+    "source_node_dirs": [
+      "cn-guangxi-g11-2026/物理/期中测试_0427_14"
+    ],
+    "source_question_keys": [
+      "44b01022704ab1ce7084ce00307c6c6643f4d3cb41f751047083893ad0600a37",
+      "a75d853aa7717db0ee3a1dcbe534d9dfb39d528c15255aa65cf30de576673cda"
+    ],
+    "source_question_snapshot_sha256": {
+      "44b01022704ab1ce7084ce00307c6c6643f4d3cb41f751047083893ad0600a37": "7667e934b6daafbcd75fcc9314bb674df3fc3bb16ae18229e5a5da9f84543261",
+      "a75d853aa7717db0ee3a1dcbe534d9dfb39d528c15255aa65cf30de576673cda": "f1b8437ffe8a7913dd767a2c15e7ab10a9f370a0c1914afbc641faf3b81095df"
+    },
+    "supporting_batches": [
+      "batch-0002"
+    ],
+    "targets": [
+      "cn-guangxi-g11-2026/物理",
+      "cn-nanjing-g11-2026/物理"
+    ]
+  },
+  "tags": [
+    "几何光学",
+    "圆弧界面",
+    "圆心垂距",
+    "全反射",
+    "临界角"
+  ],
+  "updated_at": "2026-08-09T02:23:05+00:00",
+  "useful": true,
+  "verification_checks": [
+    "各入射角是否相对对应法线定义",
+    "入射点在圆心时圆弧入射角是否为零",
+    "垂距是否不超过半径",
+    "全反射的介质方向和临界不等式是否正确"
+  ],
+  "verification_run_id": "skill-history-20260809T020638Z-ee34104f",
+  "version": 1
+}

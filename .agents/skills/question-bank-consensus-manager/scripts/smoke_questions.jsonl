@@ -1,0 +1,1 @@
+{"id":"smoke_physics_001","nodeId":"匀速运动_1","subject":"物理","difficulty":"low","pool":"display","prompt":"一个物体做匀速直线运动，在 2 s 内通过 6 m。它的速度大小为（　）","options":[{"id":"A","text":"2 m/s"},{"id":"B","text":"3 m/s"},{"id":"C","text":"6 m/s"},{"id":"D","text":"12 m/s"}],"answer":"B","explanation":"用速度定义式计算。"}

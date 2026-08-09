@@ -1,0 +1,255 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["reviews"],
+  "properties": {
+    "reviews": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "verdict",
+          "answer_consistent",
+          "teacher_answer",
+          "teacher_solution",
+          "process_review",
+          "agent_feedback",
+          "retry_feedback",
+          "question_annotation",
+          "skill_candidate",
+          "auto_promote"
+        ],
+        "properties": {
+          "id": {"type": "string"},
+          "verdict": {
+            "type": "string",
+            "enum": ["pass", "disagreement", "invalid_question"]
+          },
+          "answer_consistent": {"type": "boolean"},
+          "teacher_answer": {"type": "string"},
+          "teacher_solution": {"type": "string"},
+          "process_review": {"type": "string"},
+          "agent_feedback": {
+            "type": "array",
+            "minItems": 3,
+            "maxItems": 3,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["agent_id", "fully_correct", "issues"],
+              "properties": {
+                "agent_id": {
+                  "type": "string",
+                  "enum": ["solver1", "solver2", "solver3"]
+                },
+                "fully_correct": {"type": "boolean"},
+                "issues": {
+                  "type": "array",
+                  "items": {"type": "string"}
+                }
+              }
+            }
+          },
+          "retry_feedback": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["disposition", "issue_codes", "focus_codes"],
+            "properties": {
+              "disposition": {
+                "type": "string",
+                "enum": ["none", "retry", "question_revision", "human_review"]
+              },
+              "issue_codes": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "misread_condition",
+                    "wrong_model",
+                    "invalid_assumption",
+                    "algebra_error",
+                    "arithmetic_error",
+                    "sign_direction_error",
+                    "unit_dimension_error",
+                    "boundary_check_failed",
+                    "option_uniqueness_error",
+                    "unsupported_conclusion",
+                    "contradictory_reasoning",
+                    "incomplete_reasoning",
+                    "image_interpretation_error",
+                    "question_ambiguous",
+                    "question_incomplete",
+                    "no_unique_answer",
+                    "answer_process_mismatch"
+                  ]
+                }
+              },
+              "focus_codes": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "reread_conditions",
+                    "rebuild_model",
+                    "derive_independently",
+                    "verify_applicability",
+                    "check_algebra",
+                    "check_units",
+                    "check_signs",
+                    "test_boundary_cases",
+                    "verify_each_option",
+                    "cross_check_second_method",
+                    "inspect_image_only",
+                    "assess_question_validity"
+                  ]
+                }
+              }
+            }
+          },
+          "question_annotation": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "validity",
+              "question_type",
+              "difficulty",
+              "annotation_codes",
+              "revision_required",
+              "summary",
+              "proposed_revision"
+            ],
+            "properties": {
+              "validity": {
+                "type": "string",
+                "enum": ["valid", "invalid", "uncertain"]
+              },
+              "question_type": {
+                "type": "string",
+                "enum": ["multiple_choice", "open_response", "other"]
+              },
+              "difficulty": {
+                "type": "string",
+                "enum": ["low", "mid", "high", "uncertain"]
+              },
+              "annotation_codes": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "WELL_POSED",
+                    "SELF_CONTAINED",
+                    "UNIQUE_ANSWER",
+                    "IMAGE_DEPENDENT",
+                    "MISSING_INFORMATION",
+                    "CONTRADICTORY",
+                    "AMBIGUOUS",
+                    "OPTION_SET_INVALID",
+                    "IMAGE_TEXT_MISMATCH",
+                    "REQUIRES_REVISION"
+                  ]
+                }
+              },
+              "revision_required": {"type": "boolean"},
+              "summary": {"type": "string"},
+              "proposed_revision": {
+                "type": ["object", "null"],
+                "additionalProperties": false,
+                "required": ["prompt", "options", "revision_codes"],
+                "properties": {
+                  "prompt": {"type": "string"},
+                  "options": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": ["id", "text"],
+                      "properties": {
+                        "id": {"type": "string"},
+                        "text": {"type": "string"}
+                      }
+                    }
+                  },
+                  "revision_codes": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "ADD_MISSING_CONDITION",
+                        "REMOVE_CONTRADICTION",
+                        "DISAMBIGUATE_LANGUAGE",
+                        "REPAIR_OPTIONS",
+                        "ALIGN_IMAGE_AND_TEXT"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "skill_candidate": {
+            "type": ["object", "null"],
+            "additionalProperties": false,
+            "required": [
+              "name",
+              "description",
+              "applicability",
+              "ordered_steps",
+              "verification_checks",
+              "pitfalls",
+              "tags",
+              "related_skill_id",
+              "novelty_rationale",
+              "useful",
+              "novel",
+              "action",
+              "generalized"
+            ],
+            "properties": {
+              "name": {"type": "string"},
+              "description": {"type": "string"},
+              "applicability": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 20,
+                "items": {"type": "string"}
+              },
+              "ordered_steps": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 20,
+                "items": {"type": "string"}
+              },
+              "verification_checks": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 20,
+                "items": {"type": "string"}
+              },
+              "pitfalls": {
+                "type": "array",
+                "maxItems": 20,
+                "items": {"type": "string"}
+              },
+              "tags": {
+                "type": "array",
+                "maxItems": 12,
+                "items": {"type": "string"}
+              },
+              "related_skill_id": {"type": "string"},
+              "novelty_rationale": {"type": "string"},
+              "useful": {"type": "boolean", "enum": [true]},
+              "novel": {"type": "boolean"},
+              "action": {"type": "string", "enum": ["create", "update"]},
+              "generalized": {"type": "boolean", "enum": [true]}
+            }
+          },
+          "auto_promote": {"type": "boolean"}
+        }
+      }
+    }
+  }
+}

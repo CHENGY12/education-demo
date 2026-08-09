@@ -1,0 +1,74 @@
+{
+  "action": "create",
+  "applicability": [
+    "同高度平抛落点实验",
+    "等频闪间隔碰撞记录",
+    "一维碰撞动量检验",
+    "二维碰撞质量或方向求解"
+  ],
+  "description": "当各记录共享相同时间间隔时，用有向位移或位移矢量按比例替代速度进入动量方程。",
+  "generalized": true,
+  "name": "碰撞实验中用等时位移替代速度",
+  "novel": true,
+  "novelty_rationale": "现有技能未覆盖碰撞实验中的速度代理。",
+  "ordered_steps": [
+    "确认各速度代理对应相同飞行时间或频闪周期。",
+    "写出速度等于位移除以共同时间，并在动量方程中约去时间。",
+    "一维使用有向位移，二维保留位移矢量并分量列式。",
+    "求未知质量、位移或守恒偏差。",
+    "实验检验时结合测量不确定度判断，而非要求数值绝对相等。"
+  ],
+  "pitfalls": [
+    "飞行时间不同时不能直接比较射程",
+    "二维碰撞不能只比较位移大小",
+    "射程数据本身不能证明机械能守恒"
+  ],
+  "related_skill_id": "",
+  "sha256": "778ec1ecb3e38d51982ced26153e6c6145d9bbb1af5837d845afdfd6ba4cef30",
+  "skill_id": "solution-dda52f06d37f",
+  "source": {
+    "consolidator_response_sha256": "7e4ff0b3b410cd3777e90eb05334940a904c8839f8e7f1302b1008d295a79407",
+    "curation_run_id": "skill-history-20260809T020638Z-ee34104f",
+    "evidence_question_keys_sha256": "cc5cc5db34237a019c7b3f9b0caaa812479790e1873e0b0331364b742c6c255f",
+    "final_evidence_question_count": 1886,
+    "kind": "historical_verified_solution_curation",
+    "novelty_required": false,
+    "reuse_rationale": "平抛落点和等频闪碰撞实验都以共同时间尺度使位移与速度成正比，从而用质量加权位移检验动量。",
+    "scope_question_count": 2397,
+    "source_node_dirs": [
+      "cn-nanjing-g11-2026/物理/10月阶段性检测_11"
+    ],
+    "source_question_keys": [
+      "0f4a3906ae94937596dbeb4db796e905e9d8add047da81391a7844cecfdd6be2",
+      "1b637e621c66d89e4e1e9bfd1a8e0bd66bff21267f7ec073091d4768a9ec93a7"
+    ],
+    "source_question_snapshot_sha256": {
+      "0f4a3906ae94937596dbeb4db796e905e9d8add047da81391a7844cecfdd6be2": "0e0cf6d58575a8baac9a2d4c84eb5849669257fe60fd2ec06e5b681e1a82e9b3",
+      "1b637e621c66d89e4e1e9bfd1a8e0bd66bff21267f7ec073091d4768a9ec93a7": "14381215a9725465d0e908af1271e11b1bb0a9bc699ca620efd053386e19e3f7"
+    },
+    "supporting_batches": [
+      "batch-0003"
+    ],
+    "targets": [
+      "cn-guangxi-g11-2026/物理",
+      "cn-nanjing-g11-2026/物理"
+    ]
+  },
+  "tags": [
+    "碰撞实验",
+    "频闪照相",
+    "平抛射程",
+    "动量守恒",
+    "等时位移"
+  ],
+  "updated_at": "2026-08-09T02:23:05+00:00",
+  "useful": true,
+  "verification_checks": [
+    "各段是否确实共享同一时间尺度",
+    "平抛出口高度和落点平面是否一致",
+    "位移方向和分量符号是否正确",
+    "测量量是否从一致参考点取得"
+  ],
+  "verification_run_id": "skill-history-20260809T020638Z-ee34104f",
+  "version": 1
+}

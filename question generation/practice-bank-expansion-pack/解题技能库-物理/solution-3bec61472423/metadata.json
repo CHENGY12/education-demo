@@ -1,0 +1,79 @@
+{
+  "action": "create",
+  "applicability": [
+    "由负载额定状态逆推输电参数",
+    "求最低输电电压",
+    "求最大输送功率",
+    "求最小整数匝数比"
+  ],
+  "description": "从负载或送端状态确定线路电流，再统一处理压降、线损比例、最值及整数设备参数。",
+  "generalized": true,
+  "name": "输电线损约束的逆推与边界判定",
+  "novel": true,
+  "novelty_rationale": "现有技能未覆盖输电约束和多级逆推。",
+  "ordered_steps": [
+    "明确给定功率属于负载、线路输入还是电源输出。",
+    "从信息最确定的一端求电流，并沿变压器和线路逐级换算。",
+    "用线路电流计算压降和电流平方乘电阻形式的线损。",
+    "将损耗上限或比例要求化为不等式，先求连续边界。",
+    "结合单调性确定最值；整数参数按可行方向取整并检验相邻值。"
+  ],
+  "pitfalls": [
+    "不能忽略线路压降后混用送端与负载端电压",
+    "线损比例分母必须按题意确定",
+    "连续最优值未必是可用设备参数"
+  ],
+  "related_skill_id": "",
+  "sha256": "732cfbbc7e289ffdba55c4c96a6124a425237a5cf5ebe03e5aca64f1b4738f43",
+  "skill_id": "solution-3bec61472423",
+  "source": {
+    "consolidator_response_sha256": "7e4ff0b3b410cd3777e90eb05334940a904c8839f8e7f1302b1008d295a79407",
+    "curation_run_id": "skill-history-20260809T020638Z-ee34104f",
+    "evidence_question_keys_sha256": "cc5cc5db34237a019c7b3f9b0caaa812479790e1873e0b0331364b742c6c255f",
+    "final_evidence_question_count": 1886,
+    "kind": "historical_verified_solution_curation",
+    "novelty_required": false,
+    "reuse_rationale": "多套输电题均以线路电流为中介，将功率口径、压降和线损限制转为边界或整数约束。",
+    "scope_question_count": 2397,
+    "source_node_dirs": [
+      "cn-guangxi-g11-2026/物理/月考测试_0512_10",
+      "cn-guangxi-g11-2026/物理/月考测试_0512_14",
+      "cn-nanjing-g11-2026/物理/4月阶段性检测_15"
+    ],
+    "source_question_keys": [
+      "71caed42c2ddcfd5071f04c2b0d7a45a6f913084ff5ed232c066a7bf2311868e",
+      "1181d3bf6f6a1f1a73bb363360f71066e571d57b1e734a029582312e8b574147",
+      "a9e123022f918e9499bbbdca691e43dfd891e8e1a7e8ab761d22c585ffeaf2ae"
+    ],
+    "source_question_snapshot_sha256": {
+      "1181d3bf6f6a1f1a73bb363360f71066e571d57b1e734a029582312e8b574147": "aba1bada3e6e4ec1c01cb0d050604fe8a9627c242ff28ebf14e73066d044f5b9",
+      "71caed42c2ddcfd5071f04c2b0d7a45a6f913084ff5ed232c066a7bf2311868e": "8a6b8d46077ebc92493ce0f9b20a4e3412b8af7f050d69fe032643cfdf474bda",
+      "a9e123022f918e9499bbbdca691e43dfd891e8e1a7e8ab761d22c585ffeaf2ae": "4e88c40de8ff6d1719736a0164c3ff48951c97faf4be2f8b825e36646bb2d2db"
+    },
+    "supporting_batches": [
+      "batch-0001",
+      "batch-0006"
+    ],
+    "targets": [
+      "cn-guangxi-g11-2026/物理",
+      "cn-nanjing-g11-2026/物理"
+    ]
+  },
+  "tags": [
+    "远距离输电",
+    "线损",
+    "线路压降",
+    "边界最值",
+    "整数约束"
+  ],
+  "updated_at": "2026-08-09T02:23:05+00:00",
+  "useful": true,
+  "verification_checks": [
+    "负载功率、送端功率和线损是否混淆",
+    "线路压降是否使用高压侧线路电流",
+    "固定功率时线损是否随输电电压平方反比变化",
+    "整数取整后约束是否仍成立"
+  ],
+  "verification_run_id": "skill-history-20260809T020638Z-ee34104f",
+  "version": 1
+}

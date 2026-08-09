@@ -1,0 +1,74 @@
+{
+  "action": "create",
+  "applicability": [
+    "变化磁场中的回路电荷量",
+    "转动线圈给定角度的电荷量",
+    "完整周期净电荷",
+    "正反方向电荷绝对累计"
+  ],
+  "description": "在总电阻恒定时，将电流积分化为磁通链变化除以电阻，并在电流反向时分段累计。",
+  "generalized": true,
+  "name": "感应电荷量的磁通端点与总变差法",
+  "novel": true,
+  "novelty_rationale": "现有技能未覆盖感应电荷量的积分与总变差。",
+  "ordered_steps": [
+    "明确匝数、单匝磁通和磁通链，避免重复计入匝数。",
+    "确认全过程总电阻可视为恒定。",
+    "求代数净电荷时使用起止磁通链的代数差除以总电阻。",
+    "求绝对累计电荷时按磁通变化率变号或磁通达到极值的时刻分段，对每段变化取绝对值后相加。",
+    "转动线圈先用法线与磁场夹角表达磁通，再代入端点。"
+  ],
+  "pitfalls": [
+    "不能用峰值电动势乘总时间替代积分",
+    "磁通穿过零不必然意味着电流反向",
+    "磁通为零与感应电动势为零不是同一条件"
+  ],
+  "related_skill_id": "",
+  "sha256": "6ebc45fe58a99383e00aacab0278f4b874ab036b84519d24a50dbee47067db0d",
+  "skill_id": "solution-f3ae4cd67db3",
+  "source": {
+    "consolidator_response_sha256": "7e4ff0b3b410cd3777e90eb05334940a904c8839f8e7f1302b1008d295a79407",
+    "curation_run_id": "skill-history-20260809T020638Z-ee34104f",
+    "evidence_question_keys_sha256": "cc5cc5db34237a019c7b3f9b0caaa812479790e1873e0b0331364b742c6c255f",
+    "final_evidence_question_count": 1886,
+    "kind": "historical_verified_solution_curation",
+    "novelty_required": false,
+    "reuse_rationale": "磁场变化和转动线圈题都可积分法拉第定律，把通过电荷量化为磁通链变化，并按反向点区分净量与绝对累计量。",
+    "scope_question_count": 2397,
+    "source_node_dirs": [
+      "cn-nanjing-g11-2026/物理/4月阶段性检测_7"
+    ],
+    "source_question_keys": [
+      "fb197a29e91e412980f344899100776b64038263fd150bf7f10b9b45d9353fdf",
+      "517216c0c7d99810b4d55d62528a6004cdca56d8874f5ec9f154810c758e4859"
+    ],
+    "source_question_snapshot_sha256": {
+      "517216c0c7d99810b4d55d62528a6004cdca56d8874f5ec9f154810c758e4859": "5bffd60e8e939e7f17b3a7a881aacfc3495e367448d4d6ff3ff28462628b1acc",
+      "fb197a29e91e412980f344899100776b64038263fd150bf7f10b9b45d9353fdf": "cb6562116c457994c228fe919905cf6efb6b2566d8a471219da69455134cda0c"
+    },
+    "supporting_batches": [
+      "batch-0006"
+    ],
+    "targets": [
+      "cn-guangxi-g11-2026/物理",
+      "cn-nanjing-g11-2026/物理"
+    ]
+  },
+  "tags": [
+    "电磁感应",
+    "磁通链",
+    "电荷量",
+    "分段积分",
+    "法拉第定律"
+  ],
+  "updated_at": "2026-08-09T02:23:05+00:00",
+  "useful": true,
+  "verification_checks": [
+    "结果是否与过程快慢无关",
+    "总电阻是否包含全部串联电阻",
+    "电流反向依据是否为磁通变化率变号",
+    "完整周期净量和累计量是否区分"
+  ],
+  "verification_run_id": "skill-history-20260809T020638Z-ee34104f",
+  "version": 1
+}
