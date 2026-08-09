@@ -14,6 +14,3 @@
 
 纯静态的微精讲知识技能树 Demo，包含两个可视化版本、离线知识点数据
 和无依赖 smoke test。
-
-OOPS action-localization 代码已迁移到独立仓库
-[`CHENGY12/oops-action-localization`](https://github.com/CHENGY12/oops-action-localization)。
