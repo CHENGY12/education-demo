@@ -8,9 +8,9 @@ auditable `answer_final` writeback, and browser-based human review.
 
 - `.agents/skills/question-bank-consensus-manager/`: manager skill, prompts,
   schemas, runner, review website, and tests.
-- `question generation/practice-bank-expansion-pack/validate.py`: static JSONL
+- `practice-bank-expansion-pack/validate.py`: static JSONL
   and formatting validator.
-- `question generation/practice-bank-expansion-pack/解题技能库-物理/`: 32
+- `practice-bank-expansion-pack/解题技能库-物理/`: 32
   versioned, reusable physics solution skills with provenance metadata.
 
 Question sources, model credentials, `.qb-review` databases, and private run

@@ -458,11 +458,20 @@ class ManagerTests(unittest.TestCase):
         self.assertFalse(qb.repair_question_option_periods(row))
 
     def test_physics_Mg_is_not_misclassified_as_chemical_magnesium(self) -> None:
-        validator_path = (
-            Path(__file__).resolve().parents[4]
-            / "question generation"
-            / "practice-bank-expansion-pack"
-            / "validate.py"
+        project_root = Path(__file__).resolve().parents[4]
+        validator_path = next(
+            (
+                candidate
+                for candidate in (
+                    project_root / "practice-bank-expansion-pack" / "validate.py",
+                    project_root
+                    / "question generation"
+                    / "practice-bank-expansion-pack"
+                    / "validate.py",
+                )
+                if candidate.is_file()
+            ),
+            project_root / "practice-bank-expansion-pack" / "validate.py",
         )
         if not validator_path.is_file():
             self.skipTest("题库 validate.py 未包含在独立 Skill 发布包中")
