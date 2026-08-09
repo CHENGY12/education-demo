@@ -1,0 +1,285 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>题库共识审校台</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark">校</span>
+      <div>
+        <h1>题库共识审校台</h1>
+        <p>三次独立作答 · Teacher 核验 · 人工定稿</p>
+      </div>
+    </div>
+    <nav class="view-switch" aria-label="审校台视图">
+      <button id="show-seed" class="view-tab active" type="button" aria-pressed="true">待审查</button>
+      <button id="show-candidate" class="view-tab" type="button" aria-pressed="false">候选不一致</button>
+      <button id="show-skills" class="view-tab" type="button" aria-pressed="false">解题技能库</button>
+    </nav>
+    <div id="summary" class="summary" aria-label="题库统计"></div>
+  </header>
+
+  <div id="active-jobs" class="active-jobs hidden" aria-live="polite"></div>
+
+  <main id="questions-view" class="shell">
+    <aside class="sidebar">
+      <section class="filters">
+        <p id="view-banner" class="view-banner hidden"></p>
+        <label class="search-label">
+          <span>搜索题号、题干或目录</span>
+          <input id="search" type="search" placeholder="输入关键词…" autocomplete="off">
+        </label>
+        <div class="filter-row">
+          <label>
+            <span>状态</span>
+            <select id="status-filter">
+              <option value="disagreement">不一致（默认）</option>
+              <option value="invalid">题目无效</option>
+              <option value="error">运行错误</option>
+              <option value="running">解题中</option>
+              <option value="pending">未处理</option>
+              <option value="final">已定稿</option>
+              <option value="">全部</option>
+            </select>
+          </label>
+          <label>
+            <span>学科</span>
+            <select id="subject-filter"><option value="">全部</option></select>
+          </label>
+        </div>
+      </section>
+      <div class="list-heading">
+        <span id="list-count">0 道题</span>
+        <button id="refresh" class="ghost small" type="button">刷新</button>
+      </div>
+      <nav id="question-list" class="question-list" aria-label="题目列表"></nav>
+      <div class="pagination" aria-label="题目分页">
+        <button id="page-prev" class="ghost small" type="button">← 上一页</button>
+        <span id="page-label">第 1 页</span>
+        <button id="page-next" class="ghost small" type="button">下一页 →</button>
+      </div>
+    </aside>
+
+    <section class="workspace">
+      <div id="empty-state" class="empty-state">
+        <div class="empty-icon">✓</div>
+        <h2>当前筛选下没有待复核题目</h2>
+        <p id="empty-copy">可切换到“全部”或“已定稿”查看完整记录。</p>
+      </div>
+
+      <article id="detail" class="detail hidden">
+        <div class="detail-nav">
+          <button id="prev" class="ghost" type="button">← 上一题</button>
+          <div class="detail-actions">
+            <button id="copy-id" class="ghost" type="button">复制题号</button>
+            <button id="next" class="primary" type="button">下一题 →</button>
+          </div>
+        </div>
+
+        <section class="question-card panel">
+          <div class="question-meta">
+            <span id="status-badge" class="badge"></span>
+            <span id="subject-badge" class="badge neutral"></span>
+            <span id="question-id" class="mono"></span>
+          </div>
+          <h2 id="question-prompt"></h2>
+          <ol id="options" class="options"></ol>
+          <p id="node-path" class="path"></p>
+          <figure id="question-image-wrap" class="question-image-wrap hidden">
+            <img id="question-image" alt="原题图片">
+          </figure>
+        </section>
+
+        <section id="annotation-panel" class="annotation-panel panel hidden" aria-label="题目标注与暂存修订">
+          <div class="section-heading compact-heading">
+            <div>
+              <p class="eyebrow">QUESTION ANNOTATIONS</p>
+              <h2>题目标注与修订建议</h2>
+            </div>
+            <span id="annotation-count" class="mono"></span>
+          </div>
+          <p class="staged-warning"><strong>仅为暂存审计记录：</strong>下列 proposed revision 尚未自动修改题目，也未写入 questions.jsonl。</p>
+          <div id="annotations-list" class="annotations-list"></div>
+        </section>
+
+        <section id="job-panel" class="job-panel panel hidden" aria-live="polite">
+          <div class="job-row">
+            <div>
+              <strong id="job-message">正在解题</strong>
+              <p id="job-id" class="mono"></p>
+            </div>
+            <span id="job-progress-label">0%</span>
+          </div>
+          <div class="progress"><span id="job-progress"></span></div>
+          <p class="muted">任务在后台运行，你可以继续浏览下一题。</p>
+        </section>
+
+        <section class="section-heading">
+          <div>
+            <p class="eyebrow">独立候选与教师核验</p>
+            <h2>逐过程比较</h2>
+          </div>
+          <span id="run-id" class="mono"></span>
+        </section>
+        <section id="solutions" class="solutions-grid"></section>
+
+        <details id="rounds-panel" class="rounds-panel panel hidden">
+          <summary>
+            <span>
+              <span class="eyebrow">AUDIT HISTORY</span>
+              <strong>查看首轮、兜底轮与历史解题记录</strong>
+            </span>
+            <span id="rounds-count" class="mono"></span>
+          </summary>
+          <p class="rounds-note">当前轮仍在上方完整展示；这里按轮汇总全部三个独立 Solver、Teacher 与 enum-only retry diagnostics，当前轮会重复列出以便对照。</p>
+          <div id="rounds-list" class="rounds-list"></div>
+        </details>
+
+        <section class="resolve-panel panel">
+          <div class="resolve-copy">
+            <p class="eyebrow">三份都不可信？</p>
+            <h2>带指导重新独立解题</h2>
+            <p>提示、你的解法或需重点检查之处会等量发给三个全新 Agent，并标注为“待验证建议”。</p>
+          </div>
+          <label for="guidance">提示或建议解法</label>
+          <textarea id="guidance" rows="6" placeholder="例如：请重新检查第二步的受力方向；也可以写出你认为应采用的解法。"></textarea>
+          <div class="resolve-actions">
+            <button id="resolve" class="secondary" type="button">重新调用 3+1 Agent</button>
+            <button id="resolve-next" class="primary" type="button">提交并浏览下一题 →</button>
+          </div>
+        </section>
+      </article>
+    </section>
+  </main>
+
+  <section id="skills-view" class="shell hidden" aria-label="共享解题技能库">
+    <aside class="sidebar">
+      <section class="filters">
+        <p class="view-banner skill-banner">共享、可追溯、版本化；来源证书与人工修订分开标注</p>
+        <label class="search-label">
+          <span>搜索技能名称、说明或来源</span>
+          <input id="skill-search" type="search" placeholder="输入关键词…" autocomplete="off">
+        </label>
+      </section>
+      <div class="list-heading">
+        <span id="skill-list-count">0 个技能</span>
+        <button id="skill-refresh" class="ghost small" type="button">刷新</button>
+      </div>
+      <nav id="skill-list" class="question-list" aria-label="解题技能列表"></nav>
+      <div class="pagination" aria-label="解题技能分页">
+        <button id="skill-page-prev" class="ghost small" type="button">← 上一页</button>
+        <span id="skill-page-label">第 1 页</span>
+        <button id="skill-page-next" class="ghost small" type="button">下一页 →</button>
+      </div>
+    </aside>
+
+    <section class="workspace">
+      <div id="skill-empty-state" class="empty-state">
+        <div class="empty-icon">技</div>
+        <h2>还没有可浏览的解题技能</h2>
+        <p>技能由题目复盘提炼，并保留版本、来源和验证记录。</p>
+      </div>
+
+      <article id="skill-detail" class="detail hidden">
+        <div class="detail-nav">
+          <button id="skill-prev" class="ghost" type="button">← 上一个技能</button>
+          <div class="detail-actions">
+            <button id="skill-copy-id" class="ghost" type="button">复制技能 ID</button>
+            <button id="skill-next" class="primary" type="button">下一个技能 →</button>
+          </div>
+        </div>
+
+        <section class="skill-card panel">
+          <div class="question-meta">
+            <span id="skill-status-badge" class="badge neutral"></span>
+            <span id="skill-version-badge" class="badge"></span>
+            <span id="skill-id" class="mono"></span>
+          </div>
+          <h2 id="skill-title"></h2>
+          <p id="skill-description" class="skill-description"></p>
+
+          <div class="skill-version-toolbar">
+            <label for="skill-version-select">查看版本</label>
+            <select id="skill-version-select" aria-label="技能版本"></select>
+          </div>
+
+          <dl class="skill-metadata">
+            <div>
+              <dt>内容 SHA-256</dt>
+              <dd id="skill-sha" class="mono"></dd>
+            </div>
+            <div>
+              <dt>更新时间</dt>
+              <dd id="skill-updated"></dd>
+            </div>
+            <div>
+              <dt>来源</dt>
+              <dd id="skill-source"></dd>
+            </div>
+            <div>
+              <dt>核验</dt>
+              <dd id="skill-verification-status"></dd>
+            </div>
+          </dl>
+        </section>
+
+        <section id="skill-job-panel" class="job-panel panel hidden" aria-live="polite">
+          <div class="job-row">
+            <div>
+              <strong id="skill-job-message">正在修订技能</strong>
+              <p id="skill-job-id" class="mono"></p>
+            </div>
+            <span id="skill-job-progress-label">0%</span>
+          </div>
+          <div class="progress"><span id="skill-job-progress"></span></div>
+          <p class="muted">修订与结构、基线及版本链校验在后台运行，你可以继续浏览其他技能或题目。</p>
+        </section>
+
+        <section class="skill-content-panel panel">
+          <div class="section-heading compact-heading">
+            <div>
+              <p class="eyebrow">VERSIONED CONTENT</p>
+              <h2>技能正文</h2>
+            </div>
+            <span id="skill-content-version" class="mono"></span>
+          </div>
+          <pre id="skill-content" class="skill-content"></pre>
+        </section>
+
+        <section class="skill-verification-panel panel">
+          <div class="section-heading compact-heading">
+            <div>
+              <p class="eyebrow">POST-VERIFICATION</p>
+              <h2>版本校验记录</h2>
+            </div>
+            <span id="skill-verification-run" class="mono"></span>
+          </div>
+          <div id="skill-verification-body" class="verification-body"></div>
+        </section>
+
+        <section class="resolve-panel panel">
+          <div class="resolve-copy">
+            <p class="eyebrow">审计式修订</p>
+            <h2>输入提示，修订技能并重新验证</h2>
+            <p>系统基于当前 SHA 建立新版本，保留来源、提示和差异；随后执行结构、基线和版本链校验，不覆盖旧版本。</p>
+          </div>
+          <p id="skill-revision-base" class="revision-base mono"></p>
+          <label for="skill-guidance">修订提示</label>
+          <textarea id="skill-guidance" rows="6" placeholder="例如：补充边界条件，明确正方向；并用一道不含摩擦的反例检查是否误用公式。"></textarea>
+          <div class="resolve-actions">
+            <button id="skill-revise" class="secondary" type="button">提交修订与验证</button>
+            <button id="skill-revise-next" class="primary" type="button">提交并浏览下一个 →</button>
+          </div>
+        </section>
+      </article>
+    </section>
+  </section>
+
+  <div id="toasts" class="toasts" aria-live="assertive"></div>
+  <script src="/app.js" defer></script>
+</body>
+</html>

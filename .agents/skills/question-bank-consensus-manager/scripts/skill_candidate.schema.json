@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["skill_candidate"],
+  "properties": {
+    "skill_candidate": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "description",
+        "applicability",
+        "ordered_steps",
+        "verification_checks",
+        "pitfalls",
+        "tags",
+        "related_skill_id",
+        "novelty_rationale",
+        "useful",
+        "novel",
+        "generalized",
+        "action"
+      ],
+      "properties": {
+        "name": {"type": "string"},
+        "description": {"type": "string"},
+        "applicability": {"type": "array", "minItems": 1, "maxItems": 20, "items": {"type": "string"}},
+        "ordered_steps": {"type": "array", "minItems": 1, "maxItems": 20, "items": {"type": "string"}},
+        "verification_checks": {"type": "array", "minItems": 1, "maxItems": 20, "items": {"type": "string"}},
+        "pitfalls": {"type": "array", "maxItems": 20, "items": {"type": "string"}},
+        "tags": {"type": "array", "maxItems": 12, "items": {"type": "string"}},
+        "related_skill_id": {"type": "string"},
+        "novelty_rationale": {"type": "string"},
+        "useful": {"type": "boolean"},
+        "novel": {"type": "boolean"},
+        "generalized": {"type": "boolean"},
+        "action": {"type": "string", "enum": ["create", "update"]}
+      }
+    }
+  }
+}
