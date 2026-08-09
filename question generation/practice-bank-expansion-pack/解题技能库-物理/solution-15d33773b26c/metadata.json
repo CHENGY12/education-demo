@@ -1,0 +1,74 @@
+{
+  "action": "create",
+  "applicability": [
+    "物块在可动木板上滑至共速",
+    "小车内物体摩擦停止",
+    "分段粗糙面相对滑动",
+    "具有共同初速度的相对运动"
+  ],
+  "description": "用系统动量确定末态共同速度，以摩擦力乘相对滑动距离计算机械能耗散。",
+  "generalized": true,
+  "name": "可动载体上的相对滑动能量核算",
+  "novel": true,
+  "novelty_rationale": "现有技能不涉及可动载体摩擦耗散。",
+  "ordered_steps": [
+    "把物块和载体作为系统，由水平动量守恒求末态共同速度。",
+    "比较初末系统总动能及其他势能，得到摩擦耗散总量。",
+    "把各阶段生热写成摩擦力乘该阶段相对滑动距离。",
+    "初末共同平动相同时可先消去共同平动能。",
+    "分段粗糙时按顺序扣除各段耗散，再求目标区段相对距离。"
+  ],
+  "pitfalls": [
+    "摩擦对单个物体的功不等于系统生热",
+    "不能用物块对地路程代替相对路程",
+    "多段粗糙面不能用同一摩擦系数一次结算"
+  ],
+  "related_skill_id": "",
+  "sha256": "920b483f3b264f356bdbf4197b83abb9acadbc63a13d9c6224c23d0c04f11a95",
+  "skill_id": "solution-15d33773b26c",
+  "source": {
+    "consolidator_response_sha256": "7e4ff0b3b410cd3777e90eb05334940a904c8839f8e7f1302b1008d295a79407",
+    "curation_run_id": "skill-history-20260809T020638Z-ee34104f",
+    "evidence_question_keys_sha256": "cc5cc5db34237a019c7b3f9b0caaa812479790e1873e0b0331364b742c6c255f",
+    "final_evidence_question_count": 1886,
+    "kind": "historical_verified_solution_curation",
+    "novelty_required": false,
+    "reuse_rationale": "可动木板和小车题都必须用动量确定共同平动，用摩擦力乘相对滑动距离计算耗散。",
+    "scope_question_count": 2397,
+    "source_node_dirs": [
+      "cn-nanjing-g11-2026/物理/10月阶段性检测_9"
+    ],
+    "source_question_keys": [
+      "f52afbc27e93b3401947cacbfa4f796d082a9588fb656cc450b7644b35a75404",
+      "25ba7a4b3fa8c5b6018ac6fc0507598c8fa4857e1977cab79e48a14fbe91b807"
+    ],
+    "source_question_snapshot_sha256": {
+      "25ba7a4b3fa8c5b6018ac6fc0507598c8fa4857e1977cab79e48a14fbe91b807": "4d9813bae927e337ca4504ac56a7f9449b875142cb23c2b337de512d482d8e88",
+      "f52afbc27e93b3401947cacbfa4f796d082a9588fb656cc450b7644b35a75404": "0b0bb8c23bde8ac5ba426d1055fc7e10c4a6517971e8fb9569818fe173c2aeaa"
+    },
+    "supporting_batches": [
+      "batch-0004"
+    ],
+    "targets": [
+      "cn-guangxi-g11-2026/物理",
+      "cn-nanjing-g11-2026/物理"
+    ]
+  },
+  "tags": [
+    "相对运动",
+    "摩擦生热",
+    "动量守恒",
+    "可动木板",
+    "能量耗散"
+  ],
+  "updated_at": "2026-08-09T02:23:05+00:00",
+  "useful": true,
+  "verification_checks": [
+    "摩擦生热是否使用相对路程",
+    "末态共同速度是否由总动量确定",
+    "分段耗散之和是否等于机械能减少",
+    "整体平移改变时相对结论是否保持"
+  ],
+  "verification_run_id": "skill-history-20260809T020638Z-ee34104f",
+  "version": 1
+}

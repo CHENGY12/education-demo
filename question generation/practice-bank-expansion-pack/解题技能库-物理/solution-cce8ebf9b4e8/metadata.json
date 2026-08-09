@@ -1,0 +1,74 @@
+{
+  "action": "create",
+  "applicability": [
+    "相变中的温度与内能判断",
+    "理想气体吸热做功",
+    "绝热过程",
+    "辨析吸热、升温和内能增加"
+  ],
+  "description": "区分温度、平均动能、内能等状态量与热量、功等过程量，再应用热力学第一定律。",
+  "generalized": true,
+  "name": "热学状态量与能量传递量的分层判断",
+  "novel": true,
+  "novelty_rationale": "现有技能没有热学能量分层内容。",
+  "ordered_steps": [
+    "明确系统边界、初末状态及功的正负约定。",
+    "分别判断热传递和做功，使用热力学第一定律求内能变化。",
+    "依据物质模型解释内能：理想气体由温度决定，真实物质还涉及分子势能和物态。",
+    "用温度判断平均热运动动能，但不以其替代总内能。",
+    "将热量和功表述为跨边界传递的能量，而不是系统储存的组成部分。"
+  ],
+  "pitfalls": [
+    "相变时温度可不变而内能改变",
+    "绝热不等于内能不变",
+    "物体不‘含有’热量这一过程量"
+  ],
+  "related_skill_id": "",
+  "sha256": "079ba06067279ed106907fde6f904fd7d52c716817f1845d12c4ee425f2de740",
+  "skill_id": "solution-cce8ebf9b4e8",
+  "source": {
+    "consolidator_response_sha256": "7e4ff0b3b410cd3777e90eb05334940a904c8839f8e7f1302b1008d295a79407",
+    "curation_run_id": "skill-history-20260809T020638Z-ee34104f",
+    "evidence_question_keys_sha256": "cc5cc5db34237a019c7b3f9b0caaa812479790e1873e0b0331364b742c6c255f",
+    "final_evidence_question_count": 1886,
+    "kind": "historical_verified_solution_curation",
+    "novelty_required": false,
+    "reuse_rationale": "相变、理想气体和绝热过程题均要求区分状态量和过程量，并在物质模型成立的范围内使用第一定律。",
+    "scope_question_count": 2397,
+    "source_node_dirs": [
+      "cn-guangxi-g11-2026/物理/月考测试_0512_2"
+    ],
+    "source_question_keys": [
+      "f448bc572d632794db6263c9b738f7ac59f46a1e313de8654d2de3878ec05108",
+      "63245c1186ab1e92555e5b0b54d5ef1afbdf57193829f8f06c741c8c79cd1d99"
+    ],
+    "source_question_snapshot_sha256": {
+      "63245c1186ab1e92555e5b0b54d5ef1afbdf57193829f8f06c741c8c79cd1d99": "02894f572f6d734b03f3adf9eece71feeae0572c7de0e6e344c9003c2d77325e",
+      "f448bc572d632794db6263c9b738f7ac59f46a1e313de8654d2de3878ec05108": "f50a4ee55a62c3789ad0cd59583e2b6ababc6615806e7fd16ef4b1a3bffb7b8c"
+    },
+    "supporting_batches": [
+      "batch-0001"
+    ],
+    "targets": [
+      "cn-guangxi-g11-2026/物理",
+      "cn-nanjing-g11-2026/物理"
+    ]
+  },
+  "tags": [
+    "热力学第一定律",
+    "内能",
+    "温度",
+    "状态量",
+    "过程量"
+  ],
+  "updated_at": "2026-08-09T02:23:05+00:00",
+  "useful": true,
+  "verification_checks": [
+    "热量和功的符号是否与约定一致",
+    "是否把温度不变误判为内能必定不变",
+    "是否把吸热误判为内能必定增加",
+    "理想气体结论是否被不当推广"
+  ],
+  "verification_run_id": "skill-history-20260809T020638Z-ee34104f",
+  "version": 1
+}

@@ -1,0 +1,75 @@
+{
+  "action": "create",
+  "applicability": [
+    "由分段力图求末速度",
+    "反求峰值力或作用时间",
+    "图示力与其他恒力并存",
+    "作用结束后继续追踪运动"
+  ],
+  "description": "把力—时间图像的有向面积转为冲量，并与其他外力及后续运动阶段统一结算。",
+  "generalized": true,
+  "name": "力—时间图像的带符号冲量结算",
+  "novel": true,
+  "novelty_rationale": "现有技能未覆盖力图面积和冲量结算。",
+  "ordered_steps": [
+    "规定正方向，把初末速度和各段力写成带符号量。",
+    "按几何面积或分段积分计算图线相对时间轴的有向面积。",
+    "判断图像表示合力还是某一分力，将未包含的其他外力冲量另行加入。",
+    "用末动量等于初动量加总冲量求状态，并在阶段边界更新初值。",
+    "峰值受限的最短时间题先判断最优过程是否取到允许峰值边界，再由所需面积反求。"
+  ],
+  "pitfalls": [
+    "峰值力不是平均力",
+    "不能只算面积大小而丢失方向",
+    "接触力结束后不能继续作用"
+  ],
+  "related_skill_id": "",
+  "sha256": "195410ca8fdbb986e82d1824a55744491b723939e94e7ba167b4771ebc0bb3f9",
+  "skill_id": "solution-2372bfe7f41c",
+  "source": {
+    "consolidator_response_sha256": "7e4ff0b3b410cd3777e90eb05334940a904c8839f8e7f1302b1008d295a79407",
+    "curation_run_id": "skill-history-20260809T020638Z-ee34104f",
+    "evidence_question_keys_sha256": "cc5cc5db34237a019c7b3f9b0caaa812479790e1873e0b0331364b742c6c255f",
+    "final_evidence_question_count": 1886,
+    "kind": "historical_verified_solution_curation",
+    "novelty_required": false,
+    "reuse_rationale": "分段力图、峰值约束和作用结束后的运动都可通过有向面积统一为冲量，再逐段更新动量状态。",
+    "scope_question_count": 2397,
+    "source_node_dirs": [
+      "cn-guangxi-g11-2026/物理/期中测试_0427_8"
+    ],
+    "source_question_keys": [
+      "71719d17234428c3d42d79bba881b7bff72b2ba385195be20f8c0ef89d6248ce",
+      "7527bbbe5b4835597429fa967965cc9d82556b96f1484d28555ad8d012e204e0"
+    ],
+    "source_question_snapshot_sha256": {
+      "71719d17234428c3d42d79bba881b7bff72b2ba385195be20f8c0ef89d6248ce": "24f07fb0e88f4559c9bfbc733e19d6c1976bc097c25c2290ba77cbb0d55a485f",
+      "7527bbbe5b4835597429fa967965cc9d82556b96f1484d28555ad8d012e204e0": "b506a99626590fcf761d8f81203a4bc868e916d34081afe834215615e60afdef"
+    },
+    "supporting_batches": [
+      "batch-0003"
+    ],
+    "targets": [
+      "cn-guangxi-g11-2026/物理",
+      "cn-nanjing-g11-2026/物理"
+    ]
+  },
+  "tags": [
+    "冲量",
+    "动量定理",
+    "力时间图像",
+    "分段运动",
+    "峰值约束"
+  ],
+  "updated_at": "2026-08-09T02:23:05+00:00",
+  "useful": true,
+  "verification_checks": [
+    "图像表示合力还是单个力",
+    "轴下方面积是否取负",
+    "是否重复或遗漏重力等其他冲量",
+    "分段末态是否传给下一段",
+    "冲量方向是否与动量变化一致"
+  ],
+  "verification_run_id": "skill-history-20260809T020638Z-ee34104f",
+  "version": 1
+}

@@ -1,0 +1,81 @@
+{
+  "action": "create",
+  "applicability": [
+    "双棒或多棒电磁耦合",
+    "求总焦耳热或分棒发热",
+    "求安培力功",
+    "无外力阶段求共同末速"
+  ],
+  "description": "对多导体闭合回路分层处理外力功、总动能、焦耳热及单个导体的安培力功。",
+  "generalized": true,
+  "name": "耦合导体电磁过程的整体—个体双层账本",
+  "novel": true,
+  "novelty_rationale": "现有技能未覆盖耦合机电系统的整体与局部账本。",
+  "ordered_steps": [
+    "划定整体边界并判断沿运动方向是否存在外力。",
+    "无外力阶段可用系统动量守恒求共同速度；有外力时不擅用动量守恒。",
+    "对整体写外力总功等于总动能增量与总焦耳热之和。",
+    "对单根导体写动能定理，分离该棒的外力功和安培力功。",
+    "同一串联回路各处电流相同，故全过程热量按电阻比分配。",
+    "用各棒安培力功代数和等于总焦耳热的相反数复核。"
+  ],
+  "pitfalls": [
+    "某棒安培力功不等于该棒自身发热",
+    "电磁内力做功代数和通常不为零",
+    "持续外力阶段不能机械套动量守恒"
+  ],
+  "related_skill_id": "",
+  "sha256": "591b47d77dd08712708cf1d4ef413b72e5e7628fc6b06cc4a5a2c88d745c12c6",
+  "skill_id": "solution-fb7e2fe6d496",
+  "source": {
+    "consolidator_response_sha256": "7e4ff0b3b410cd3777e90eb05334940a904c8839f8e7f1302b1008d295a79407",
+    "curation_run_id": "skill-history-20260809T020638Z-ee34104f",
+    "evidence_question_keys_sha256": "cc5cc5db34237a019c7b3f9b0caaa812479790e1873e0b0331364b742c6c255f",
+    "final_evidence_question_count": 1886,
+    "kind": "historical_verified_solution_curation",
+    "novelty_required": false,
+    "reuse_rationale": "三个批次的多导体候选均要求先做系统整体能量账本，再对单棒应用动能定理，并按共同电流分配热量；可去重合并。",
+    "scope_question_count": 2397,
+    "source_node_dirs": [
+      "cn-nanjing-g11-2026/物理/4月阶段性检测_11",
+      "cn-nanjing-g11-2026/物理/5月期中检测_10"
+    ],
+    "source_question_keys": [
+      "20cd609fe1d493e8dfa74601656193c61ad6304505f5559ae2abb3932d09b2df",
+      "3c737e5b2554c5ac6a2ce199c8d1dc6dcbfc75db14a36752a4e12c68325068e7",
+      "8735bdf1f2bb1ec1292b18dcaf7ff44ac45da7da58ac30a75f425a3dd62a6a6e"
+    ],
+    "source_question_snapshot_sha256": {
+      "20cd609fe1d493e8dfa74601656193c61ad6304505f5559ae2abb3932d09b2df": "7b7705e980df8d9670a8b4137b028bd775c92174dd8ee002c761e5a9cbc83b2e",
+      "3c737e5b2554c5ac6a2ce199c8d1dc6dcbfc75db14a36752a4e12c68325068e7": "85a06ebbb7c2510e3cf5491d6128126e41205c609c6e73ef67180295300b636e",
+      "8735bdf1f2bb1ec1292b18dcaf7ff44ac45da7da58ac30a75f425a3dd62a6a6e": "b2d4677ff1b2c8230dca01a956796414838c5d02ca2cdf5b6c94f4a564fb32b4"
+    },
+    "supporting_batches": [
+      "batch-0005",
+      "batch-0006",
+      "batch-0007"
+    ],
+    "targets": [
+      "cn-guangxi-g11-2026/物理",
+      "cn-nanjing-g11-2026/物理"
+    ]
+  },
+  "tags": [
+    "多导体棒",
+    "电磁感应",
+    "能量守恒",
+    "安培力功",
+    "焦耳热分配"
+  ],
+  "updated_at": "2026-08-09T02:23:05+00:00",
+  "useful": true,
+  "verification_checks": [
+    "动量守恒前是否确认无外力冲量",
+    "整体式是否包含所有运动导体的动能",
+    "安培力是否在整体外功中被重复计入",
+    "分热量之和是否等于总热量",
+    "总焦耳热是否非负"
+  ],
+  "verification_run_id": "skill-history-20260809T020638Z-ee34104f",
+  "version": 1
+}

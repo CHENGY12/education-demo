@@ -1,0 +1,89 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["review_summary", "skill_candidates"],
+  "properties": {
+    "review_summary": {"type": "string"},
+    "skill_candidates": {
+      "type": "array",
+      "maxItems": 30,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["source_question_keys", "source_candidate_ids", "reuse_rationale", "skill_candidate"],
+        "properties": {
+          "source_question_keys": {
+            "type": "array",
+            "minItems": 2,
+            "maxItems": 200,
+            "items": {"type": "string"}
+          },
+          "source_candidate_ids": {
+            "type": "array",
+            "maxItems": 30,
+            "items": {"type": "string"}
+          },
+          "reuse_rationale": {"type": "string"},
+          "skill_candidate": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "name",
+              "description",
+              "applicability",
+              "ordered_steps",
+              "verification_checks",
+              "pitfalls",
+              "tags",
+              "related_skill_id",
+              "novelty_rationale",
+              "useful",
+              "novel",
+              "generalized",
+              "action"
+            ],
+            "properties": {
+              "name": {"type": "string"},
+              "description": {"type": "string"},
+              "applicability": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 20,
+                "items": {"type": "string"}
+              },
+              "ordered_steps": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 20,
+                "items": {"type": "string"}
+              },
+              "verification_checks": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 20,
+                "items": {"type": "string"}
+              },
+              "pitfalls": {
+                "type": "array",
+                "maxItems": 20,
+                "items": {"type": "string"}
+              },
+              "tags": {
+                "type": "array",
+                "maxItems": 12,
+                "items": {"type": "string"}
+              },
+              "related_skill_id": {"type": "string"},
+              "novelty_rationale": {"type": "string"},
+              "useful": {"type": "boolean", "enum": [true]},
+              "novel": {"type": "boolean"},
+              "generalized": {"type": "boolean", "enum": [true]},
+              "action": {"type": "string", "enum": ["create", "update"]}
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,74 @@
+{
+  "action": "create",
+  "applicability": [
+    "由能量比例求位置",
+    "由位置求动势能分配",
+    "由能量求回复力比例",
+    "求能量阈值持续时间"
+  ],
+  "description": "用归一化位移统一表达势能占比、动能占比、回复力比例及能量阈值时间。",
+  "generalized": true,
+  "name": "简谐运动位移、能量与回复力的无量纲互换",
+  "novel": true,
+  "novelty_rationale": "现有技能未覆盖振动能量的无量纲转换。",
+  "ordered_steps": [
+    "以平衡位置为势能零点，并确认简谐近似和机械能守恒。",
+    "引入归一化位移，将势能占比写成其平方，动能占比写成一减该平方。",
+    "需要时间时把归一化位移写成正弦或余弦。",
+    "利用回复力大小与位移绝对值成正比，将能量占比开平方后换成回复力比例。",
+    "阈值问题先求相位区间，再换算时间。"
+  ],
+  "pitfalls": [
+    "势能占比与位移平方而非一次方成正比",
+    "能量比例不能直接当作回复力比例",
+    "仅由能量不能判断位置一侧或速度方向"
+  ],
+  "related_skill_id": "",
+  "sha256": "1aaa9731a9fcc8bee2ef16f68d3a67c2c20a06db35c7741d4d05bbd42a341011",
+  "skill_id": "solution-75ba554278f4",
+  "source": {
+    "consolidator_response_sha256": "7e4ff0b3b410cd3777e90eb05334940a904c8839f8e7f1302b1008d295a79407",
+    "curation_run_id": "skill-history-20260809T020638Z-ee34104f",
+    "evidence_question_keys_sha256": "cc5cc5db34237a019c7b3f9b0caaa812479790e1873e0b0331364b742c6c255f",
+    "final_evidence_question_count": 1886,
+    "kind": "historical_verified_solution_curation",
+    "novelty_required": false,
+    "reuse_rationale": "多道简谐能量题均可用归一化位移平方在位置、动能、势能和回复力之间转换。",
+    "scope_question_count": 2397,
+    "source_node_dirs": [
+      "cn-guangxi-g11-2026/物理/期中测试_0427_9"
+    ],
+    "source_question_keys": [
+      "fd954eacb4508ff6b9e1dd58db9bf25abe809a926a12219c6f9f0823515092bc",
+      "abacae93e76d2da0dec7fc75124745e697d46b5c67aa6cad5ef6027524f5d8e0"
+    ],
+    "source_question_snapshot_sha256": {
+      "abacae93e76d2da0dec7fc75124745e697d46b5c67aa6cad5ef6027524f5d8e0": "f0844fcb50aa0e6bdad67b49d3094657a62e7498e4386a2ad7c745dae5329531",
+      "fd954eacb4508ff6b9e1dd58db9bf25abe809a926a12219c6f9f0823515092bc": "c4dc3a2d027151a46d2c4b0c626a73c688d811e7720f50862790f0cb272a3f79"
+    },
+    "supporting_batches": [
+      "batch-0003"
+    ],
+    "targets": [
+      "cn-guangxi-g11-2026/物理",
+      "cn-nanjing-g11-2026/物理"
+    ]
+  },
+  "tags": [
+    "简谐运动",
+    "能量分配",
+    "归一化位移",
+    "回复力",
+    "相位"
+  ],
+  "updated_at": "2026-08-09T02:23:05+00:00",
+  "useful": true,
+  "verification_checks": [
+    "势能零点是否位于平衡位置",
+    "动能和势能之和是否为总能量",
+    "反求位置时是否保留正负分支",
+    "回复力大小是否使用位移绝对值"
+  ],
+  "verification_run_id": "skill-history-20260809T020638Z-ee34104f",
+  "version": 1
+}

@@ -1,0 +1,81 @@
+{
+  "action": "create",
+  "applicability": [
+    "同侧或异侧条纹跨距",
+    "亮纹与暗纹混合定位",
+    "仪器比例或零点偏差",
+    "由跨距求波长及误差倍率"
+  ],
+  "description": "把亮暗纹编号转为整数或半整数坐标，用位置差求间隔并追踪测量倍率。",
+  "generalized": true,
+  "name": "双缝条纹的坐标计数、尺度校正与误差传播",
+  "novel": true,
+  "novelty_rationale": "现有几何方向误差技能不包含离散条纹坐标和倍率传播。",
+  "ordered_steps": [
+    "以中央亮纹为原点，亮纹写成整数倍间距，暗纹写成半整数倍并添加左右符号。",
+    "用终点坐标减起点坐标得到实际间隔倍数。",
+    "先对两个位置作差，再按比例校准真实跨距并除以间隔倍数。",
+    "统一单位后代入条纹间距关系。",
+    "误差题写出各输入量的测量值与真值之比，按目标量的正反比合成；共同加性零点误差先检查能否在差值中抵消。"
+  ],
+  "pitfalls": [
+    "条纹条数通常比间隔数多一",
+    "不能把暗纹编号直接写成整数倍位置",
+    "直线尺寸倍率不能误当成其他变量倍率"
+  ],
+  "related_skill_id": "",
+  "sha256": "c6ad049d5c2236927e27dde5f794aa59c39a0de280f28c23454d94023e06554f",
+  "skill_id": "solution-77499af03fc7",
+  "source": {
+    "consolidator_response_sha256": "7e4ff0b3b410cd3777e90eb05334940a904c8839f8e7f1302b1008d295a79407",
+    "curation_run_id": "skill-history-20260809T020638Z-ee34104f",
+    "evidence_question_keys_sha256": "cc5cc5db34237a019c7b3f9b0caaa812479790e1873e0b0331364b742c6c255f",
+    "final_evidence_question_count": 1886,
+    "kind": "historical_verified_solution_curation",
+    "novelty_required": false,
+    "reuse_rationale": "三个批次的双缝测量候选都围绕亮暗纹坐标、间隔数、尺度校准和倍率误差，适合合并。",
+    "scope_question_count": 2397,
+    "source_node_dirs": [
+      "cn-guangxi-g11-2026/物理/期中测试_0427_11",
+      "cn-nanjing-g11-2026/物理/12月阶段性检测_9",
+      "cn-nanjing-g11-2026/物理/期末学情调研_11"
+    ],
+    "source_question_keys": [
+      "3224ad545ec45fb3f9645953d9ea3331220b06d97c255ebcdf86fdfffad241e4",
+      "d7f62f5cb55f4c43ef5fa4aa1bee4bba95dad68cf13ae273f8c3d4b4f86c30a8",
+      "b4917ec6586c96d4a4529a2d3cd92a5b272d5902a4c657d82e3fbc2c6bb3a6d8"
+    ],
+    "source_question_snapshot_sha256": {
+      "3224ad545ec45fb3f9645953d9ea3331220b06d97c255ebcdf86fdfffad241e4": "eedd074d9d6033d5af2f16e0d27bf9ea9709ed2ce73d5163972a12b97e668d12",
+      "b4917ec6586c96d4a4529a2d3cd92a5b272d5902a4c657d82e3fbc2c6bb3a6d8": "effea4624f3afb7be0c13603033fad23ab7cf3428879c1ec346b824815169aea",
+      "d7f62f5cb55f4c43ef5fa4aa1bee4bba95dad68cf13ae273f8c3d4b4f86c30a8": "4a0cddfc7741a2806d0effcd584fbbbe3bf00f71aee17d6e19835ef3af3679fc"
+    },
+    "supporting_batches": [
+      "batch-0002",
+      "batch-0005",
+      "batch-0008"
+    ],
+    "targets": [
+      "cn-guangxi-g11-2026/物理",
+      "cn-nanjing-g11-2026/物理"
+    ]
+  },
+  "tags": [
+    "双缝干涉",
+    "条纹计数",
+    "坐标法",
+    "尺度校准",
+    "误差传播"
+  ],
+  "updated_at": "2026-08-09T02:23:05+00:00",
+  "useful": true,
+  "verification_checks": [
+    "同类条纹间隔数是否为编号差",
+    "暗纹是否按半整数位置处理",
+    "异侧坐标是否使用相反符号",
+    "校准倍率乘除方向是否正确",
+    "共同零点误差是否在差值中抵消"
+  ],
+  "verification_run_id": "skill-history-20260809T020638Z-ee34104f",
+  "version": 1
+}

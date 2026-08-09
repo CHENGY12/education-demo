@@ -1,0 +1,79 @@
+{
+  "action": "create",
+  "applicability": [
+    "多级稀释后的单滴有效体积",
+    "由油膜面积估算分子尺度",
+    "反求滴数或稀释参数",
+    "判断操作和面积误差方向"
+  ],
+  "description": "追踪多级配液后的单滴纯物质体积，用体积除以膜面积估算尺度，并分析操作与乘法误差。",
+  "generalized": true,
+  "name": "油膜法的多级稀释、膜厚与误差链",
+  "novel": true,
+  "novelty_rationale": "现有技能不覆盖油膜法的浓度链和模型条件。",
+  "ordered_steps": [
+    "逐级写出取样再定容的体积分数因子并相乘。",
+    "用标定体积除以滴数求单滴溶液体积，再乘最终体积分数。",
+    "统一体积和面积单位，用单滴纯物质体积等于膜面积乘膜厚建立正反计算。",
+    "确认形成完整单分子膜且边界清晰，滴加时减少液面冲击。",
+    "误差题分别写出浓度、滴体积和面积的测量值与真值倍率，再按分子分母合成。"
+  ],
+  "pitfalls": [
+    "二维长度放大倍率不能直接当面积倍率",
+    "毫升到立方米和平方厘米到平方米的换算指数不同",
+    "溶液越浓或滴管越高并非越好"
+  ],
+  "related_skill_id": "",
+  "sha256": "cc467a9ff9de805cf46252c55517af9c4e80d3850c571b5a384b57edd78f1424",
+  "skill_id": "solution-b7f9ebb0781b",
+  "source": {
+    "consolidator_response_sha256": "7e4ff0b3b410cd3777e90eb05334940a904c8839f8e7f1302b1008d295a79407",
+    "curation_run_id": "skill-history-20260809T020638Z-ee34104f",
+    "evidence_question_keys_sha256": "cc5cc5db34237a019c7b3f9b0caaa812479790e1873e0b0331364b742c6c255f",
+    "final_evidence_question_count": 1886,
+    "kind": "historical_verified_solution_curation",
+    "novelty_required": false,
+    "reuse_rationale": "油膜法候选分别覆盖多级稀释、滴定标定、面积误差和实验操作，可合并为一条完整且不题目化的体积链。",
+    "scope_question_count": 2397,
+    "source_node_dirs": [
+      "cn-guangxi-g11-2026/物理/月考测试_0512_12",
+      "cn-nanjing-g11-2026/物理/期末考试_7"
+    ],
+    "source_question_keys": [
+      "0aa9f198be06670012b464dc0d4f22c85c4ff09d00c563c615b62017e4518e1f",
+      "48d06e2946630af639042ef0f26142e8e2cc45653bec870e043d34941d2c6241",
+      "b9d4109a34051379842c0d378ecf68e07769fb10d65f4973a278442ad21ea6f3"
+    ],
+    "source_question_snapshot_sha256": {
+      "0aa9f198be06670012b464dc0d4f22c85c4ff09d00c563c615b62017e4518e1f": "347cf4e1b67e8bb1f1d0e1330277a3168a5fdccd1aa8fe4431ece35e9639f803",
+      "48d06e2946630af639042ef0f26142e8e2cc45653bec870e043d34941d2c6241": "435101158742525df6a6df0b51b771f1c223ed37e23218d7faaa6c10b29bd2ac",
+      "b9d4109a34051379842c0d378ecf68e07769fb10d65f4973a278442ad21ea6f3": "3a1f448be7c913bbd6535f0f946670cf2d28911a1b6d6119cde100bb7f493f5b"
+    },
+    "supporting_batches": [
+      "batch-0001",
+      "batch-0010"
+    ],
+    "targets": [
+      "cn-guangxi-g11-2026/物理",
+      "cn-nanjing-g11-2026/物理"
+    ]
+  },
+  "tags": [
+    "油膜法",
+    "多级稀释",
+    "单分子膜",
+    "误差传播",
+    "单位换算"
+  ],
+  "updated_at": "2026-08-09T02:23:05+00:00",
+  "useful": true,
+  "verification_checks": [
+    "是否使用纯物质体积而非整滴溶液体积",
+    "多级稀释因子是否全部保留",
+    "面积与厚度相乘后是否为体积量纲",
+    "面积偏大时厚度是否偏小",
+    "操作是否有利于保持原始油膜边界"
+  ],
+  "verification_run_id": "skill-history-20260809T020638Z-ee34104f",
+  "version": 1
+}

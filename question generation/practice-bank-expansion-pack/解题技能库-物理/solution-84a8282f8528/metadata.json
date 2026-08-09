@@ -1,0 +1,74 @@
+{
+  "action": "create",
+  "applicability": [
+    "碰后物体从平台飞出",
+    "穿透或碰撞后的落点反演",
+    "求碰撞末速度",
+    "计算碰撞机械能损失"
+  ],
+  "description": "将短时碰撞和碰后抛体分开，由轨迹反求末速度，再完成碰撞动量与能量账本。",
+  "generalized": true,
+  "name": "碰撞—抛体串联系统的分阶段反演",
+  "novel": true,
+  "novelty_rationale": "现有技能不涉及碰撞与抛体串联反演。",
+  "ordered_steps": [
+    "按时间划分短时碰撞与碰后抛体阶段。",
+    "由竖直运动求飞行时间；若有竖直初速度须写入位移方程。",
+    "由水平位移和飞行时间反求碰后水平速度。",
+    "统一正方向，将碰前后速度作为带符号量代入动量守恒。",
+    "只比较碰撞瞬间前后的总动能，求机械能损失。"
+  ],
+  "pitfalls": [
+    "不能把整个抛体过程纳入碰撞动量守恒",
+    "速度大小不能全部按正数代入",
+    "有竖直初速度时不能套纯平抛时间"
+  ],
+  "related_skill_id": "",
+  "sha256": "7753d184683d5a165a98c11e1f0f14f5de5dcbb285b638153ac3d2d8c584709c",
+  "skill_id": "solution-84a8282f8528",
+  "source": {
+    "consolidator_response_sha256": "7e4ff0b3b410cd3777e90eb05334940a904c8839f8e7f1302b1008d295a79407",
+    "curation_run_id": "skill-history-20260809T020638Z-ee34104f",
+    "evidence_question_keys_sha256": "cc5cc5db34237a019c7b3f9b0caaa812479790e1873e0b0331364b742c6c255f",
+    "final_evidence_question_count": 1886,
+    "kind": "historical_verified_solution_curation",
+    "novelty_required": false,
+    "reuse_rationale": "多道复合力学题都先由抛体轨迹反演碰后速度，再回到短时碰撞使用带符号动量并核算能损。",
+    "scope_question_count": 2397,
+    "source_node_dirs": [
+      "cn-guangxi-g11-2026/物理/期中测试_0427_13"
+    ],
+    "source_question_keys": [
+      "013f1073bee7783c3fada0e77807e08525c345214e21ea92f7a5c69ab16ae443",
+      "521007474a1b06c3b39449e794a82be18610d6df72a043803098dc9f839b1359"
+    ],
+    "source_question_snapshot_sha256": {
+      "013f1073bee7783c3fada0e77807e08525c345214e21ea92f7a5c69ab16ae443": "828fa9e1e445ce55ac774a50b6e37e8ace3e90fba9cbaf1d4369c289a1024f03",
+      "521007474a1b06c3b39449e794a82be18610d6df72a043803098dc9f839b1359": "7aa58b24ce0d324024ac63dade58f0c03752a58a00c8a8162065679e68aaae0c"
+    },
+    "supporting_batches": [
+      "batch-0002"
+    ],
+    "targets": [
+      "cn-guangxi-g11-2026/物理",
+      "cn-nanjing-g11-2026/物理"
+    ]
+  },
+  "tags": [
+    "碰撞",
+    "抛体反演",
+    "动量守恒",
+    "机械能损失",
+    "分阶段建模"
+  ],
+  "updated_at": "2026-08-09T02:23:05+00:00",
+  "useful": true,
+  "verification_checks": [
+    "动量守恒是否只用于碰撞阶段及外冲量可忽略方向",
+    "反向速度是否带负号",
+    "能量账本是否包含所有物体",
+    "机械能损失是否非负"
+  ],
+  "verification_run_id": "skill-history-20260809T020638Z-ee34104f",
+  "version": 1
+}

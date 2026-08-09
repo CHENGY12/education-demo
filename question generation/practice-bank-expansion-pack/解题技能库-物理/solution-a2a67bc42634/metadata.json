@@ -1,0 +1,78 @@
+{
+  "action": "create",
+  "applicability": [
+    "源初相和路程差同时存在",
+    "由单列强度求合强",
+    "判断干涉点同相或反相",
+    "求两点最大高度差"
+  ],
+  "description": "合成源初相差和传播相位差，再用振幅相量或强度关系判断干涉结果及点间相位。",
+  "generalized": true,
+  "name": "相干波的总相位差与有符号振幅合成",
+  "novel": true,
+  "novelty_rationale": "现有技能不含波的相量与强度合成。",
+  "ordered_steps": [
+    "选定相位差次序，将源初相差和路程或时延造成的传播相位差合成。",
+    "把路程差换成空间相位差，必要时对整周取模。",
+    "由强度开平方得到相对振幅，再用相量合成式求合振幅或合强。",
+    "需要比较多个点时，以同一简谐因子表示各点，并给合振幅附上相位符号。",
+    "更新位置或源相位后重新计算总相位差，不沿用旧的加强减弱结论。"
+  ],
+  "pitfalls": [
+    "振幅比不是声强比",
+    "源相位超前与传播滞后不能不分符号地相加",
+    "某时刻位移为零不等于该点始终静止"
+  ],
+  "related_skill_id": "",
+  "sha256": "16996482eb619ac3d0fe9f94b26b6e3b3a1a48d2db636c0cf657041122c76390",
+  "skill_id": "solution-a2a67bc42634",
+  "source": {
+    "consolidator_response_sha256": "7e4ff0b3b410cd3777e90eb05334940a904c8839f8e7f1302b1008d295a79407",
+    "curation_run_id": "skill-history-20260809T020638Z-ee34104f",
+    "evidence_question_keys_sha256": "cc5cc5db34237a019c7b3f9b0caaa812479790e1873e0b0331364b742c6c255f",
+    "final_evidence_question_count": 1886,
+    "kind": "historical_verified_solution_curation",
+    "novelty_required": false,
+    "reuse_rationale": "相干波候选分别描述总相位差、声强矢量合成和干涉点有符号振幅，本质可统一为相量合成方法。",
+    "scope_question_count": 2397,
+    "source_node_dirs": [
+      "cn-guangxi-g11-2026/物理/期中测试_0427_1",
+      "cn-nanjing-g11-2026/物理/12月阶段性检测_6"
+    ],
+    "source_question_keys": [
+      "9200843ca4fcdb1b3d6e0e5dbbcf034d70e6a25d2e802c414bd3f64223ed6c9b",
+      "3c26fa52ad2e76ec6a7d38349cb3d515598f33b5371eff39345c05a060a955ec",
+      "b4129b1c17b51f157f35182217285b973364a198ed6792767eb4743d227464a8"
+    ],
+    "source_question_snapshot_sha256": {
+      "3c26fa52ad2e76ec6a7d38349cb3d515598f33b5371eff39345c05a060a955ec": "b99a13302162ee28ea67606139f2d0ef5a6ee3c133eedcbfbc6a1e383384a3ae",
+      "9200843ca4fcdb1b3d6e0e5dbbcf034d70e6a25d2e802c414bd3f64223ed6c9b": "3005ae90ec0b81d21d5c46c19c6a2f1b6d2041caa19be9443ceb6e32f6dee677",
+      "b4129b1c17b51f157f35182217285b973364a198ed6792767eb4743d227464a8": "4e70fb0c78062df5ef3f48742f91985b3170e33e51ddc89358c3cf822bfb3dc8"
+    },
+    "supporting_batches": [
+      "batch-0002",
+      "batch-0005"
+    ],
+    "targets": [
+      "cn-guangxi-g11-2026/物理",
+      "cn-nanjing-g11-2026/物理"
+    ]
+  },
+  "tags": [
+    "相干波",
+    "相位差",
+    "相量合成",
+    "声强",
+    "干涉"
+  ],
+  "updated_at": "2026-08-09T02:23:05+00:00",
+  "useful": true,
+  "verification_checks": [
+    "同相和反相极限是否分别给出振幅和与振幅差",
+    "合强是否位于允许最大最小值之间",
+    "是否误把声强直接相加",
+    "两点最大高度差是否考虑有符号相位"
+  ],
+  "verification_run_id": "skill-history-20260809T020638Z-ee34104f",
+  "version": 1
+}

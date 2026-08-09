@@ -1,0 +1,80 @@
+{
+  "action": "create",
+  "applicability": [
+    "由密度和体积估算微粒数",
+    "混合物或解离体系粒子计数",
+    "由数密度估算平均间距",
+    "由目标间距反求质量或密度"
+  ],
+  "description": "在质量、物质的量、微粒数、数密度和平均占据体积之间进行分层换算。",
+  "generalized": true,
+  "name": "宏观物质量、粒子数密度与平均间距换算链",
+  "novel": true,
+  "novelty_rationale": "现有技能未覆盖宏观量与微观粒子尺度的换算。",
+  "ordered_steps": [
+    "统一质量、体积和摩尔质量单位，并明确统计对象。",
+    "各组分分别由质量除以摩尔质量求物质的量，再乘阿伏加德罗常数。",
+    "按化学式、解离系数或目标原子数乘计数因子，并对同一口径求和。",
+    "用总粒子数除以总体积求数密度。",
+    "把单粒子平均占据体积写成数密度倒数，平均间距取其立方根；反求时按相反顺序展开。"
+  ],
+  "pitfalls": [
+    "不能把混合物总质量除以任一单一摩尔质量",
+    "平均占据体积不是粒子真实几何体积",
+    "平均间距关系不能漏掉三次方或立方根"
+  ],
+  "related_skill_id": "",
+  "sha256": "f8956d605d577724de5bc7f7c9f9d82fcb3a28b03d5d64f2cd8d7d32ba9d2005",
+  "skill_id": "solution-9dc3a5d416d3",
+  "source": {
+    "consolidator_response_sha256": "7e4ff0b3b410cd3777e90eb05334940a904c8839f8e7f1302b1008d295a79407",
+    "curation_run_id": "skill-history-20260809T020638Z-ee34104f",
+    "evidence_question_keys_sha256": "cc5cc5db34237a019c7b3f9b0caaa812479790e1873e0b0331364b742c6c255f",
+    "final_evidence_question_count": 1886,
+    "kind": "historical_verified_solution_curation",
+    "novelty_required": false,
+    "reuse_rationale": "宏观样品到粒子数以及粒子数密度到平均间距属于同一可逆计数链，多个批次分别提供正算、混合和反算证据。",
+    "scope_question_count": 2397,
+    "source_node_dirs": [
+      "cn-guangxi-g11-2026/物理/月考测试_0512_13",
+      "cn-nanjing-g11-2026/物理/4月阶段性检测_14",
+      "cn-nanjing-g11-2026/物理/5月期中检测_2"
+    ],
+    "source_question_keys": [
+      "b74631bdd3733fd6190769485635ffbf74212975c2b74ff060d2c163e9bf388b",
+      "8967dd8a19a75d265befa4e43378f79177a59e767d51d0d007322d60a29907d5",
+      "e2bcbd6e04989ee806193379ecc48c6cb7e6491eaa4dc825139708aaf08c9617"
+    ],
+    "source_question_snapshot_sha256": {
+      "8967dd8a19a75d265befa4e43378f79177a59e767d51d0d007322d60a29907d5": "9b6ec363e897aa9b25f5be8c387474082c6fec7beac8bb971859bdaa7e0733ef",
+      "b74631bdd3733fd6190769485635ffbf74212975c2b74ff060d2c163e9bf388b": "8c9c1654237ec6f027a0f66ec2f151f7b35b2c0947765a46f0eaba591c27d13e",
+      "e2bcbd6e04989ee806193379ecc48c6cb7e6491eaa4dc825139708aaf08c9617": "28d9558af727964daba81aa5fef41e8bd1edff0845cc6be67928f9d72f8f82cd"
+    },
+    "supporting_batches": [
+      "batch-0001",
+      "batch-0006",
+      "batch-0007"
+    ],
+    "targets": [
+      "cn-guangxi-g11-2026/物理",
+      "cn-nanjing-g11-2026/物理"
+    ]
+  },
+  "tags": [
+    "阿伏伽德罗常数",
+    "粒子计数",
+    "数密度",
+    "平均间距",
+    "化学计量"
+  ],
+  "updated_at": "2026-08-09T02:23:05+00:00",
+  "useful": true,
+  "verification_checks": [
+    "统计对象是分子、原子、离子还是化学式单位",
+    "不同组分是否分别使用各自摩尔质量",
+    "平均间距是否按数密度负三分之一次方变化",
+    "单位和数量级是否合理"
+  ],
+  "verification_run_id": "skill-history-20260809T020638Z-ee34104f",
+  "version": 1
+}

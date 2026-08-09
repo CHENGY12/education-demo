@@ -1,0 +1,81 @@
+{
+  "action": "create",
+  "applicability": [
+    "竖直或斜面弹簧振动",
+    "突然加挂、卸载或剪断",
+    "恒定电场力撤去或反向",
+    "由端点状态求支持力或参数"
+  ],
+  "description": "先由静力平衡确定新旧平衡点，再利用位置、速度连续性求振幅、端点状态和接触力。",
+  "generalized": true,
+  "name": "弹簧振动的平衡位置平移与恒力突变",
+  "novel": true,
+  "novelty_rationale": "现有技能未覆盖弹簧平衡点迁移和突变连续性。",
+  "ordered_steps": [
+    "统一规定弹簧形变量符号，分别求突变前后静力平衡形变量。",
+    "以突变后平衡位置为新原点，把实际形变量减去新平衡形变量。",
+    "检查突变是否可忽略冲量；若可，则位置连续且速度不突变。",
+    "突变前静止时，相对新平衡点的初位移绝对值就是振幅；有初速度时用相空间或能量合成。",
+    "使用突变后的实际振动质量求角频率，并在端点按加速度指向平衡位置列受力式。"
+  ],
+  "pitfalls": [
+    "实际弹簧形变量不等于简谐位移",
+    "重力或恒力通常移动平衡点而非直接改变角频率形式",
+    "有初速度或冲量时不能直接用平衡点差作振幅"
+  ],
+  "related_skill_id": "",
+  "sha256": "0d40c6b61b64f8a65e0d8807f9062c289be7cc95819caed9e51cfd6a7c3ca009",
+  "skill_id": "solution-feec1acd58df",
+  "source": {
+    "consolidator_response_sha256": "7e4ff0b3b410cd3777e90eb05334940a904c8839f8e7f1302b1008d295a79407",
+    "curation_run_id": "skill-history-20260809T020638Z-ee34104f",
+    "evidence_question_keys_sha256": "cc5cc5db34237a019c7b3f9b0caaa812479790e1873e0b0331364b742c6c255f",
+    "final_evidence_question_count": 1886,
+    "kind": "historical_verified_solution_curation",
+    "novelty_required": false,
+    "reuse_rationale": "竖直弹簧、载荷突变和恒力反向候选的共同核心都是重新确定平衡位置，并把实际形变量转换为相对新平衡点的简谐位移。",
+    "scope_question_count": 2397,
+    "source_node_dirs": [
+      "cn-nanjing-g11-2026/物理/10月阶段性检测_15",
+      "cn-nanjing-g11-2026/物理/12月阶段性检测_11",
+      "cn-nanjing-g11-2026/物理/期末学情调研_12"
+    ],
+    "source_question_keys": [
+      "1fc6e0e4f8c6780d112241c1935066f9808da04e5369492233203c45f5e0ee79",
+      "d7da79b861571efe8f610e5b15e404fedf4bf0adb1cae60f44bb0a05bf7146af",
+      "7427ef9de08f54cc12edcc436d7375119c5fbdfc5158d4e6b125605990d738f1"
+    ],
+    "source_question_snapshot_sha256": {
+      "1fc6e0e4f8c6780d112241c1935066f9808da04e5369492233203c45f5e0ee79": "00625c28cd3ce72c37afddbbf5d2a10e10bc08a01f509f576a085b9f0a92a5f5",
+      "7427ef9de08f54cc12edcc436d7375119c5fbdfc5158d4e6b125605990d738f1": "b8c6cc9698cb7683a3b6d333961b19e4faa7ca0c85d8b46d9c96bb5a69f768a2",
+      "d7da79b861571efe8f610e5b15e404fedf4bf0adb1cae60f44bb0a05bf7146af": "9bcb0ace3ecf910872306f22751bf428640aad537e8238b6b7d900a7f04bd265"
+    },
+    "supporting_batches": [
+      "batch-0003",
+      "batch-0004",
+      "batch-0008"
+    ],
+    "targets": [
+      "cn-guangxi-g11-2026/物理",
+      "cn-nanjing-g11-2026/物理"
+    ]
+  },
+  "tags": [
+    "弹簧振子",
+    "平衡位置",
+    "载荷突变",
+    "振幅",
+    "端点受力"
+  ],
+  "updated_at": "2026-08-09T02:23:05+00:00",
+  "useful": true,
+  "verification_checks": [
+    "平衡条件是否使用实际随动质量",
+    "振幅是否为到新平衡点的距离",
+    "恒力反向时改变量是否包含双向差值",
+    "角频率是否使用突变后质量",
+    "端点加速度方向是否正确"
+  ],
+  "verification_run_id": "skill-history-20260809T020638Z-ee34104f",
+  "version": 1
+}

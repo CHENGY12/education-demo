@@ -1,0 +1,78 @@
+{
+  "action": "create",
+  "applicability": [
+    "由初态确定LC振荡表达式",
+    "由能量比例反推状态",
+    "判断充放电方向",
+    "求首次达到目标状态的时间"
+  ],
+  "description": "用统一相位模型同时确定电荷、电流、充放电趋势和电磁能比例。",
+  "generalized": true,
+  "name": "LC振荡的相位、符号与能量联合定位",
+  "novel": true,
+  "novelty_rationale": "现有技能不包含振荡电路相位分析。",
+  "ordered_steps": [
+    "明确极板电荷和电流正方向，并固定二者的导数关系。",
+    "依据初始电荷和电流符号选择表达式与初相。",
+    "把电场能写成归一化电荷平方，把磁场能写成归一化电流平方。",
+    "利用电荷、电流的正负及增减趋势确定唯一相位象限。",
+    "沿相位演化方向选首次目标相位，再用相位差换算时间。"
+  ],
+  "pitfalls": [
+    "仅凭能量比例不能确定电荷符号",
+    "同一幅值每周期通常出现多次",
+    "能量振荡周期是电荷振荡周期的一半"
+  ],
+  "related_skill_id": "",
+  "sha256": "86623046884f5053aa825bc6b9f6e232bebfb2d3a6092bab637908a8f86f22e7",
+  "skill_id": "solution-159a16602fb7",
+  "source": {
+    "consolidator_response_sha256": "7e4ff0b3b410cd3777e90eb05334940a904c8839f8e7f1302b1008d295a79407",
+    "curation_run_id": "skill-history-20260809T020638Z-ee34104f",
+    "evidence_question_keys_sha256": "cc5cc5db34237a019c7b3f9b0caaa812479790e1873e0b0331364b742c6c255f",
+    "final_evidence_question_count": 1886,
+    "kind": "historical_verified_solution_curation",
+    "novelty_required": false,
+    "reuse_rationale": "两个批次的LC相位候选方法完全相同，均需联合电荷、电流符号、导数方向和能量平方关系排除象限歧义。",
+    "scope_question_count": 2397,
+    "source_node_dirs": [
+      "cn-guangxi-g11-2026/物理/月考测试_0512_9"
+    ],
+    "source_question_keys": [
+      "a64d136dc4266d87175a69cd31b409b7b715bea029892ae9ae230bd4408fdb05",
+      "b5480fdaea8ae64238ce35f7ed10cea215762063ec208aae7910087f62b36e80",
+      "7126c70102b7770ff96db9acf396b66ab054fee2dc08d53de7c284dadbadb379"
+    ],
+    "source_question_snapshot_sha256": {
+      "7126c70102b7770ff96db9acf396b66ab054fee2dc08d53de7c284dadbadb379": "08f2f2583aa210423b1a6863589e413df0f3afa23a5ada6f2683474115db1d15",
+      "a64d136dc4266d87175a69cd31b409b7b715bea029892ae9ae230bd4408fdb05": "6d9233aa00c9a65667288522f4c88554ddf57e900073a77d5a85031deb20249f",
+      "b5480fdaea8ae64238ce35f7ed10cea215762063ec208aae7910087f62b36e80": "915be9a20c63a13dfe6ec6fb04da41de08ac8359e7156950f4520331000d3b06"
+    },
+    "supporting_batches": [
+      "batch-0001",
+      "batch-0002"
+    ],
+    "targets": [
+      "cn-guangxi-g11-2026/物理",
+      "cn-nanjing-g11-2026/物理"
+    ]
+  },
+  "tags": [
+    "LC振荡",
+    "相位",
+    "电荷电流",
+    "能量转换",
+    "象限"
+  ],
+  "updated_at": "2026-08-09T02:23:05+00:00",
+  "useful": true,
+  "verification_checks": [
+    "电流方向是否与电荷导数定义一致",
+    "能量平方关系是否保留正负分支",
+    "初相是否同时满足电荷和变化趋势",
+    "目标是否要求首次出现",
+    "两种能量占比之和是否为一"
+  ],
+  "verification_run_id": "skill-history-20260809T020638Z-ee34104f",
+  "version": 1
+}

@@ -1,0 +1,74 @@
+{
+  "action": "create",
+  "applicability": [
+    "导体棒切割磁感线",
+    "部分进入磁场的线框",
+    "测量含源段端电压",
+    "计算匀速维持功率"
+  ],
+  "description": "把切割磁感线的导体建模为电动势与内阻串联的支路，再按普通电路规则计算。",
+  "generalized": true,
+  "name": "动生电动势导体的含源支路等效",
+  "novel": true,
+  "novelty_rationale": "现有技能未涉及电磁感应电路等效。",
+  "ordered_steps": [
+    "识别真正产生动生电动势的导体段，确定电动势大小和极性。",
+    "确定该段内阻及其余外电路等效电阻。",
+    "把含源段视为电动势与内阻串联，求闭合回路电流。",
+    "含源段端电压按电动势与内部压降合成，无源段按电阻压降计算。",
+    "匀速且无储能变化时，用机械功率等于全回路焦耳热或电动势乘电流复核。"
+  ],
+  "pitfalls": [
+    "含源导体端电压一般不等于自身电阻压降",
+    "均匀导线电阻应按长度分配",
+    "单个电阻热功率不能使用全回路总电阻"
+  ],
+  "related_skill_id": "",
+  "sha256": "af5067443158bfda7010e031bb3d074b3645eaf210bee13872aa8b7113c3b8a6",
+  "skill_id": "solution-1e56553ae566",
+  "source": {
+    "consolidator_response_sha256": "7e4ff0b3b410cd3777e90eb05334940a904c8839f8e7f1302b1008d295a79407",
+    "curation_run_id": "skill-history-20260809T020638Z-ee34104f",
+    "evidence_question_keys_sha256": "cc5cc5db34237a019c7b3f9b0caaa812479790e1873e0b0331364b742c6c255f",
+    "final_evidence_question_count": 1886,
+    "kind": "historical_verified_solution_curation",
+    "novelty_required": false,
+    "reuse_rationale": "多道动生感应题都需要把切割导体作为含源支路，区分其电动势、端电压、局部热功率和机械输入。",
+    "scope_question_count": 2397,
+    "source_node_dirs": [
+      "cn-guangxi-g11-2026/物理/月考测试_0512_15"
+    ],
+    "source_question_keys": [
+      "d787b1950b883d685bb56d132187ce4945221c13b4735caa8d7bee5d2abb122f",
+      "716e1a697df6dcfa4f65cd0dd7f0a6b0ceb07593448905f149f0d8951bb59716"
+    ],
+    "source_question_snapshot_sha256": {
+      "716e1a697df6dcfa4f65cd0dd7f0a6b0ceb07593448905f149f0d8951bb59716": "904bbb0951221d9662bcc3bc74f53edce5a294fb6a0b9975a7fa2a538da5a78a",
+      "d787b1950b883d685bb56d132187ce4945221c13b4735caa8d7bee5d2abb122f": "e78f92ffb5b8156e49bb642161403dd3a2e7bcb499753e16a6475bf9362ce899"
+    },
+    "supporting_batches": [
+      "batch-0001"
+    ],
+    "targets": [
+      "cn-guangxi-g11-2026/物理",
+      "cn-nanjing-g11-2026/物理"
+    ]
+  },
+  "tags": [
+    "动生电动势",
+    "含源电路",
+    "端电压",
+    "焦耳热",
+    "机械功率"
+  ],
+  "updated_at": "2026-08-09T02:23:05+00:00",
+  "useful": true,
+  "verification_checks": [
+    "电压表跨接部分是否包含电动势源",
+    "端电压是否被误写成单纯电阻压降",
+    "局部热功率和总功率是否区分",
+    "机械功率是否等于全部电阻热功率"
+  ],
+  "verification_run_id": "skill-history-20260809T020638Z-ee34104f",
+  "version": 1
+}

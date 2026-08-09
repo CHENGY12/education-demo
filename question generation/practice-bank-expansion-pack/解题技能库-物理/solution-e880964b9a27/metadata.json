@@ -1,0 +1,74 @@
+{
+  "action": "create",
+  "applicability": [
+    "由势能曲线判断力方向和大小",
+    "判断稳定平衡点",
+    "求保守力做功",
+    "确定转折点和可达区间"
+  ],
+  "description": "用势能负斜率、驻点邻域和总能量水平线统一判断力、稳定性、转折点与逃逸。",
+  "generalized": true,
+  "name": "一维势能曲线的力与可达区间判读",
+  "novel": true,
+  "novelty_rationale": "现有技能没有势能曲线分析方法。",
+  "ordered_steps": [
+    "规定位置正方向，用势能对位置的负斜率确定力的符号。",
+    "用斜率绝对值比较力大小。",
+    "在势能驻点检查两侧受力是否指回驻点，以判断稳定性。",
+    "运动问题先确定总机械能，并写出动能等于总能量减势能。",
+    "保留动能非负区间，势能等于总能量处为候选转折点，再结合运动方向选根。"
+  ],
+  "pitfalls": [
+    "势能为零不代表力为零",
+    "势能最低点处力为零而非最大",
+    "总能量低于无穷远势能时通常不能逃逸"
+  ],
+  "related_skill_id": "",
+  "sha256": "49229decc008832e98c617e358905f36e03eb7378cce97dc5ad7d6844b046407",
+  "skill_id": "solution-e880964b9a27",
+  "source": {
+    "consolidator_response_sha256": "7e4ff0b3b410cd3777e90eb05334940a904c8839f8e7f1302b1008d295a79407",
+    "curation_run_id": "skill-history-20260809T020638Z-ee34104f",
+    "evidence_question_keys_sha256": "cc5cc5db34237a019c7b3f9b0caaa812479790e1873e0b0331364b742c6c255f",
+    "final_evidence_question_count": 1886,
+    "kind": "historical_verified_solution_curation",
+    "novelty_required": false,
+    "reuse_rationale": "多道题反复利用势能斜率判力、驻点判稳定性及总能量水平线判可达区间。",
+    "scope_question_count": 2397,
+    "source_node_dirs": [
+      "cn-guangxi-g11-2026/物理/月考测试_0512_3"
+    ],
+    "source_question_keys": [
+      "c3ee7da63a08256241115ace0dfba70e6f87f58257edf39a91f914426254bb1f",
+      "34e8bf857732fe98f65b2cc4d09a04f3c1b3439bddfea4cca6986a3bcabd680c"
+    ],
+    "source_question_snapshot_sha256": {
+      "34e8bf857732fe98f65b2cc4d09a04f3c1b3439bddfea4cca6986a3bcabd680c": "b74d53ad1a9b23e207da573f161a52697a58c5ae279a296f50f6cbeffef0a3c4",
+      "c3ee7da63a08256241115ace0dfba70e6f87f58257edf39a91f914426254bb1f": "d8d8481e239972b73ca6046a295d5576210c4bda52529de16676a577e861ab2c"
+    },
+    "supporting_batches": [
+      "batch-0001"
+    ],
+    "targets": [
+      "cn-guangxi-g11-2026/物理",
+      "cn-nanjing-g11-2026/物理"
+    ]
+  },
+  "tags": [
+    "势能曲线",
+    "保守力",
+    "稳定平衡",
+    "机械能",
+    "转折点"
+  ],
+  "updated_at": "2026-08-09T02:23:05+00:00",
+  "useful": true,
+  "verification_checks": [
+    "是否遗漏负号导致力方向颠倒",
+    "是否把势能值正负误当成力方向",
+    "候选位置动能是否非负",
+    "多个交点是否按当前运动方向筛选"
+  ],
+  "verification_run_id": "skill-history-20260809T020638Z-ee34104f",
+  "version": 1
+}
