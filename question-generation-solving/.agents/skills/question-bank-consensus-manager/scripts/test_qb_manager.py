@@ -428,6 +428,21 @@ class ManagerTests(unittest.TestCase):
         )
         self.assertIn(r"\mathrm{J}", rendered)
 
+    def test_prompts_include_delivery_quality_gates(self) -> None:
+        generator = (qb.REFERENCE_ROOT / "generator-solver-prompt.md").read_text(encoding="utf-8")
+        solver = (qb.REFERENCE_ROOT / "solver-prompt.md").read_text(encoding="utf-8")
+        teacher = (qb.REFERENCE_ROOT / "teacher-prompt.md").read_text(encoding="utf-8")
+        manager = (qb.REFERENCE_ROOT / "manager-prompt.md").read_text(encoding="utf-8")
+        for prompt in (generator, solver, teacher):
+            self.assertIn("控制字符", prompt)
+            self.assertIn(r"\mathrm", prompt)
+        self.assertIn("Markdown 表格", generator)
+        self.assertIn(r"\%", generator)
+        self.assertIn("空公式", teacher)
+        self.assertIn("UNIT_DIMENSION_MISMATCH", teacher)
+        self.assertIn("--prepare-delivery", manager)
+        self.assertIn("question_snapshot_sha256", manager)
+
     def test_safe_format_repair_adds_sentence_periods_idempotently(self) -> None:
         row = question("sentence-options")
         row["options"] = [
@@ -816,6 +831,84 @@ class ManagerTests(unittest.TestCase):
         after, _ = qb.read_jsonl(self.node / "questions.jsonl")
         self.assertEqual(len(after), 3)
         self.assertEqual(after[-1]["explanation"], "核验后的过程。")
+
+    def test_existing_accept_updates_authoritative_questions_jsonl(self) -> None:
+        qb.scan_bank(self.state)
+        row = self.rows()[0]
+        qb.accept_final(
+            self.state,
+            row["question_key"],
+            run_id="existing-final-test",
+            source="human_accept:teacher",
+            answer="D",
+            solution="核验后的权威解析。",
+        )
+        source_rows, errors = qb.read_jsonl(self.node / "questions.jsonl")
+        self.assertFalse(errors)
+        source = next(item for item in source_rows if item["id"] == row["qid"])
+        self.assertEqual(source["answer"], "D")
+        self.assertEqual(source["explanation"], "核验后的权威解析。")
+        stored = qb.get_question_row(self.state, row["question_key"])
+        self.assertEqual(json.loads(stored["question_json"]), source)
+        verified = qb.verify_state(self.state)
+        self.assertTrue(verified["ok"], verified["errors"])
+
+    def test_existing_accept_refuses_to_overwrite_post_scan_source_edit(self) -> None:
+        qb.scan_bank(self.state)
+        row = self.rows()[0]
+        source_rows, _ = qb.read_jsonl(self.node / "questions.jsonl")
+        edited = next(item for item in source_rows if item["id"] == row["qid"])
+        edited["prompt"] = "用户在扫描后修改了题干（　）"
+        qb.atomic_write_jsonl(self.node / "questions.jsonl", source_rows)
+        with self.assertRaisesRegex(qb.ManagerError, "已在扫描/解题后变化"):
+            qb.accept_final(
+                self.state,
+                row["question_key"],
+                run_id="stale-source-test",
+                source="human_accept:teacher",
+                answer="D",
+                solution="不应写入。",
+            )
+        current_rows, _ = qb.read_jsonl(self.node / "questions.jsonl")
+        current = next(item for item in current_rows if item["id"] == row["qid"])
+        self.assertEqual(current["prompt"], "用户在扫描后修改了题干（　）")
+        finals, _ = qb.read_jsonl(self.node / "answer_final.jsonl")
+        self.assertFalse(any(item["id"] == row["qid"] for item in finals))
+
+    def test_export_review_contains_question_and_solution_hashes(self) -> None:
+        qb.scan_bank(self.state)
+        row = self.rows()[0]
+        pipeline = qb.Pipeline(self.state, model=None, max_agent_processes=3)
+        pipeline.runner = FakeRunner()
+        run_id = qb.new_run_id("review-hash")
+        run_dir = pipeline.create_manifest(run_id, "test", {"fixture": True})
+        counts = pipeline.audit_rows([row], run_id=run_id, run_dir=run_dir)
+        self.assertEqual(counts["final"], 1)
+        qb.export_unresolved(self.state)
+        reviews, errors = qb.read_jsonl(self.node / "answer_review.jsonl")
+        self.assertFalse(errors)
+        review = next(item for item in reviews if item["id"] == row["qid"])
+        current = qb.get_question_row(self.state, row["question_key"])
+        self.assertEqual(review["manager_status"], "final")
+        self.assertTrue(review["auto_promote"])
+        self.assertEqual(
+            review["question_snapshot_sha256"],
+            qb.public_question_snapshot_sha256(current),
+        )
+        validator = runpy.run_path(
+            str(Path(__file__).resolve().parents[4] / "practice-bank-expansion-pack" / "validate.py"),
+            run_name="__delivery_validator_test__",
+        )
+        self.assertEqual(
+            review["question_snapshot_sha256"],
+            validator["question_snapshot_sha256"](
+                json.loads(current["question_json"]), current["question_key"]
+            ),
+        )
+        self.assertEqual(
+            review["teacher_solution_sha256"],
+            qb.sha256_text(json.loads(current["question_json"])["explanation"]),
+        )
 
     def test_human_accept_cannot_bypass_bank_validator_for_generated_question(self) -> None:
         qb.scan_bank(self.state)

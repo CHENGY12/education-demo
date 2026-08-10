@@ -4,8 +4,8 @@
 
 ## [question-generation-solving](question-generation-solving/)
 
-自动化出题、三路独立解题、Teacher 核验、`answer_final` 安全写入、
-不一致题网页审查，以及可持续更新的解题 Skill 库。
+自动化出题、三路独立解题、Teacher 核验、最终答案安全写入、
+严格交付校验、不一致题网页审查，以及可持续更新的解题 Skill 库。
 
 使用时建议直接在 Codex 中打开此子目录，使项目内的
 `.agents/skills/question-bank-consensus-manager` 自动被发现。

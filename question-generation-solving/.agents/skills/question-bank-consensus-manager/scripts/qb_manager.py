@@ -993,25 +993,37 @@ def upsert_jsonl_by_id(path: Path, record: dict[str, Any]) -> None:
         atomic_write_jsonl(path, output)
 
 
-def ensure_generated_question_in_source(
-    state: State, row: sqlite3.Row, answer: str, solution: str
+def write_final_question_to_source(
+    state: State, row: sqlite3.Row, final_question: dict[str, Any]
 ) -> None:
-    if row["source_kind"] != "generated":
-        return
+    """Make questions.jsonl authoritative for every accepted final answer.
+
+    ``answer_final.jsonl`` remains a compatibility/audit artifact, but delivery
+    consumers use ``questions.jsonl``.  Existing seed questions therefore need
+    the same atomic answer/explanation replacement as generated questions.
+    """
     qfile = state.bank / row["question_file"]
     existing, errors = read_jsonl(qfile)
     if errors:
-        raise ManagerError("无法写入生成题，源 JSONL 已损坏: " + errors[0])
-    qid = row["qid"]
-    if any(str(item.get("id", "")) == qid for item in existing):
-        return
-    question = json.loads(row["question_json"])
-    question["answer"] = answer
-    question["explanation"] = solution
-    # Human acceptance and retry paths must not bypass the same bank contract
-    # enforced during initial generation.
-    validate_with_bank_contract(state, question)
-    existing.append(question)
+        raise ManagerError("无法写入最终题目，源 JSONL 已损坏: " + errors[0])
+    qid = str(row["qid"])
+    matching = [index for index, item in enumerate(existing) if str(item.get("id", "")) == qid]
+    if len(matching) > 1:
+        raise ManagerError(f"源 questions.jsonl 中 id={qid!r} 出现多次，拒绝写回")
+    if not matching and row["source_kind"] != "generated":
+        raise ManagerError(f"源 questions.jsonl 中找不到现有题 id={qid!r}，拒绝写回")
+    if matching:
+        indexed_question = json.loads(row["question_json"])
+        if compact_json(existing[matching[0]]) != compact_json(indexed_question):
+            raise ManagerError(
+                f"源 questions.jsonl 中 id={qid!r} 已在扫描/解题后变化；"
+                "拒绝覆盖，请重新 scan 并重做该题"
+            )
+    validate_with_bank_contract(state, final_question)
+    if matching:
+        existing[matching[0]] = final_question
+    else:
+        existing.append(final_question)
     atomic_write_jsonl(qfile, existing)
 
 
@@ -1038,8 +1050,13 @@ def accept_final(
         final_question["answer"] = answer
         final_question["explanation"] = solution
         validate_with_bank_contract(state, final_question)
-        ensure_generated_question_in_source(state, row, answer, solution)
         final_path = state.bank / row["node_dir"] / "answer_final.jsonl"
+        final_rows, final_errors = read_jsonl(final_path)
+        if final_errors:
+            raise ManagerError("拒绝覆盖包含无效 JSONL 的 answer_final: " + final_errors[0])
+        if sum(1 for item in final_rows if str(item.get("id", "")) == row["qid"]) > 1:
+            raise ManagerError(f"answer_final.jsonl 中 id={row['qid']!r} 出现多次，拒绝写回")
+        write_final_question_to_source(state, row, final_question)
         canonical = {"id": row["qid"], "answer": answer, "solution": solution}
         upsert_jsonl_by_id(final_path, canonical)
         decision_id = uuid.uuid4().hex
@@ -1048,10 +1065,11 @@ def accept_final(
             conn.execute("BEGIN IMMEDIATE")
             conn.execute(
                 """
-                UPDATE questions SET status='final',current_run_id=?,teacher_answer=?,
-                    teacher_solution=?,teacher_verdict=?,updated_at=? WHERE question_key=?
+                UPDATE questions SET status='final',current_run_id=?,question_json=?,
+                    teacher_answer=?,teacher_solution=?,teacher_verdict=?,updated_at=?
+                WHERE question_key=?
                 """,
-                (run_id, answer, solution, source, created, key),
+                (run_id, compact_json(final_question), answer, solution, source, created, key),
             )
             conn.execute(
                 "INSERT INTO decisions VALUES(?,?,?,?,?,?,?)",
@@ -1068,6 +1086,7 @@ def accept_final(
             "answer": answer,
             "solution_sha256": sha256_text(solution),
             "written_to": safe_rel(final_path, state.bank),
+            "authoritative_question_file": str(row["question_file"]),
             "created_at": created,
         }
         append_jsonl(state.decisions_path, audit)
@@ -4795,7 +4814,7 @@ def validate_with_bank_contract(state: State, question: dict[str, Any]) -> None:
     except Exception as exc:
         raise ManagerError(f"题库 check_question 执行失败: {exc}") from exc
     if violations:
-        raise ManagerError("生成题未通过题库 validate.py: " + "；".join(map(str, violations[:8])))
+        raise ManagerError("题目未通过题库 validate.py: " + "；".join(map(str, violations[:8])))
 
 
 def latest_run_for_question(state: State, key: str) -> str | None:
@@ -5287,6 +5306,7 @@ def export_unresolved(state: State) -> dict[str, int]:
         review = detail.get("review")
         if not review:
             continue
+        row = get_question_row(state, key)
         reviews_by_node.setdefault(detail["node_dir"], []).append(
             {
                 "id": detail["id"],
@@ -5294,6 +5314,10 @@ def export_unresolved(state: State) -> dict[str, int]:
                 "student_answers": {a["agent_id"]: a["answer"] for a in detail["attempts"]},
                 "answer_consistent": review["answer_consistent"],
                 "teacher_answer": review["teacher_answer"],
+                "question_snapshot_sha256": public_question_snapshot_sha256(row),
+                "teacher_solution_sha256": sha256_text(review["teacher_solution"]),
+                "manager_status": detail["status"],
+                "auto_promote": review["auto_promote"],
                 "correct": review["verdict"] == "pass",
                 "teacher_verdict": review["verdict"],
                 "process_review": review["process_review"],
@@ -5372,6 +5396,39 @@ def verify_state(state: State) -> dict[str, Any]:
             matches = [f for f in finals if str(f.get("id", "")) == row["qid"]]
             if len(matches) != 1:
                 errors.append(f"{final_path}: {row['qid']} 应恰有一条 final，现为 {len(matches)}")
+                continue
+            source_path = state.bank / row["question_file"]
+            source_rows, source_errors = read_jsonl(source_path)
+            errors.extend(source_errors)
+            source_matches = [
+                item for item in source_rows if str(item.get("id", "")) == row["qid"]
+            ]
+            if len(source_matches) != 1:
+                errors.append(
+                    f"{source_path}: final 题 {row['qid']} 在 questions.jsonl 中应恰有一条，"
+                    f"现为 {len(source_matches)}"
+                )
+                continue
+            final = matches[0]
+            source_question = source_matches[0]
+            expected_answer = str(final.get("answer", ""))
+            expected_solution = str(final.get("solution", ""))
+            if str(source_question.get("answer", "")) != expected_answer:
+                errors.append(
+                    f"{source_path}: {row['qid']} 的 questions.answer 与 answer_final 不一致"
+                )
+            if str(source_question.get("explanation", "")) != expected_solution:
+                errors.append(
+                    f"{source_path}: {row['qid']} 的 questions.explanation 与 answer_final 不一致"
+                )
+            if compact_json(source_question) != compact_json(question):
+                errors.append(
+                    f"{row['question_key']}: SQLite question_json 与源 questions.jsonl 不一致"
+                )
+            if str(row["teacher_answer"] or "") != expected_answer:
+                errors.append(f"{row['question_key']}: teacher_answer 与最终答案不一致")
+            if str(row["teacher_solution"] or "") != expected_solution:
+                errors.append(f"{row['question_key']}: teacher_solution 与最终解析不一致")
     legacy_review_contracts = 0
     for review in review_rows:
         pair = (str(review["question_key"]), str(review["run_id"]))
