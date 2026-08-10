@@ -4,11 +4,11 @@
 
 一个题目节点通常包含：
 
-- `questions.jsonl`：一行一题，至少有 `id`、`prompt`、`options`；现有题库还使用 `nodeId`、`subject`、`difficulty`、`pool`、`answer`、`explanation`。
+- `questions.jsonl`：一行一题，至少有 `id`、`prompt`、`options`；现有题库还使用 `nodeId`、`subject`、`difficulty`、`pool`、`answer`、`explanation`。最终交付以这里的 `answer`/`explanation` 为权威；接受 final 时 manager 必须同步更新它们。
 - `reference.md`：知识点、考查要点和原题文字。
 - `question.png` / `question.jpg`：可选原题图。
-- `answer_final.jsonl`：兼容输出，每行 `{id, answer, solution}`；完整来源写在审计状态中。
-- `answer_review.jsonl`：Teacher 的派生审查记录，可从状态库重建。
+- `answer_final.jsonl`：内部兼容/审计输出，每行 `{id, answer, solution}`；不进入交付包。
+- `answer_review.jsonl`：Teacher 的派生审查记录，可从状态库重建；交付记录包含 `question_snapshot_sha256` 与 `teacher_solution_sha256`，用于证明复核题面、最终答案和 `questions.explanation` 没有漂移。
 
 根目录输出：
 
@@ -29,7 +29,18 @@
 
 `pending -> running -> final | disagreement | invalid | error`
 
-重解不会覆盖旧 attempt；它创建新的 run id。自动后核验兜底也必须是新的 child run，且最多一轮。人工接受任一候选后进入 `final`，同时保留全部旧 review。对已有 `answer_final.jsonl` 的题，扫描时直接标记 final，不擅自重跑。
+重解不会覆盖旧 attempt；它创建新的 run id。自动后核验兜底也必须是新的 child run，且最多一轮。人工接受任一候选后进入 `final`，同时保留全部旧 review。对已有 `answer_final.jsonl` 的题，扫描时会兼容导入为 final，但 `verify` 与交付 validator 仍要求它和权威 `questions.jsonl` 完全一致；旧产物不因被导入就自动获得新交付证书。
+
+## 交付契约
+
+交付包由 `validate.py --prepare-delivery` 在题库外的新目录生成。每个有题节点只含：
+
+- 必需：`questions.jsonl`、`answer_review.jsonl`；
+- 可选：`question.png/jpg/jpeg`、`reference.md`。
+
+不得包含 `answer_final.jsonl`、`answers1.jsonl`、`answers2.jsonl`、`answers3.jsonl`、`.qb-review` 或原始 Agent invocation。进入交付的每道题必须恰有一条 review，且 `teacher_verdict=pass`、`correct=true`、`answer_consistent=true`、`manager_status=final`、`auto_promote=true`，三名 solver 答案与 Teacher 相同、题面快照哈希相同、`questions.answer` 与 `teacher_answer` 相同、`questions.explanation` 与 Teacher 解法哈希相同。非 pass/final 题直接排除；标成 pass 却哈希或答案冲突时整批失败。
+
+逐题静态契约还拒绝控制字符、数学环境外的 LaTeX/上下标、公式内裸 `%`、裸单位、题干重复选项、单字母选项、Markdown 表格选项、空公式、生成修补对话及内部审校用语。整批按科目检查 A/B/C/D 分布；修正分布只能交换完整选项并重新核验，不能孤立修改答案字母。
 
 ## Candidate solution
 

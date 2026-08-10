@@ -15,7 +15,7 @@ Manage the whole question-bank lifecycle while keeping the three candidate solut
 3. Use `--isolation strict` (the default). On macOS this adds a per-invocation Seatbelt policy: a solver may read its enumerated prompt/request/schema and explicit question image, but reads of source-bank files and sibling solver outputs are denied by the OS. Strict mode fails closed when that backend is unavailable; never silently downgrade it.
 4. Do not start the teacher until all three solver outputs are closed and hashed.
 5. Let the teacher inspect all three processes, independently recompute the answer, and explicitly decide whether auto-promotion is safe.
-6. Auto-promote only when all three answers are equivalent, every material reasoning chain is correct, the question is valid, and the teacher returns `auto_promote=true`.
+6. Auto-promote only when all three answers are equivalent, every material reasoning chain is correct, the question is valid, the teacher returns `auto_promote=true`, and the bank's per-question validator accepts the exact Teacher answer and solution.
 7. Treat a user's re-solve hint as guidance, not ground truth. Show it to all three fresh solvers identically.
 8. When the first Teacher finds a repairable disagreement, retain that run and perform at most one new 3+1 round. The new solvers receive only canonical enum error categories and check categories; never pass the first answers, Teacher answer, concrete derivation, candidate count, or Agent identity.
 9. Require `issues=[]` for every fully-correct solver, a valid option id for multiple choice, an unchanged public question snapshot, a valid/no-revision question annotation, and a clear retry contract before automatic final writeback.
@@ -84,13 +84,28 @@ python3 "$SKILL_ROOT/scripts/qb_manager.py" expand \
   --limit 1
 ```
 
-The generator is also candidate solver 1 for newly generated questions. Solvers 2 and 3 receive only the generated stem and options. Teacher-approved questions are atomically added to `questions.jsonl` and `answer_final.jsonl`; unresolved generated questions remain in the review state until a human decision.
+The generator is also candidate solver 1 for newly generated questions. Solvers 2 and 3 receive only the generated stem and options. For both seed and generated questions, an accepted final synchronizes the Teacher answer/solution into authoritative `questions.jsonl`, the database, and the internal compatibility `answer_final.jsonl`; unresolved generated questions remain in the review state until a human decision.
 
-When the bank root provides `validate.py` with `check_question(q, line_no)`, the runner executes that per-question contract before **any** existing or generated question can enter `answer_final`; generated source insertion uses the same gate. After finishing a scope, also run the bank's aggregate quota validator:
+When the bank root provides `validate.py` with `check_question(q, line_no)`, the runner executes that per-question contract before **any** existing or generated question can enter final; source writeback uses the same gate. The bundled contract rejects control characters, LaTeX outside math, unescaped formula percentages, naked units, option dumps in stems, letter-only options, empty formulas, repair chatter, and internal review terms. After finishing a scope, also run the bank's aggregate quota validator:
 
 ```bash
 python3 "$BANK_ROOT/validate.py" "cn-nanjing-g11-2026/物理"
 ```
+
+### Prepare a delivery package
+
+First refresh derived review records, then let the validator build a new directory outside the bank:
+
+```bash
+python3 "$SKILL_ROOT/scripts/qb_manager.py" export --bank "$BANK_ROOT"
+python3 "$BANK_ROOT/validate.py" "cn-nanjing-g11-2026/物理" \
+  --prepare-delivery "/absolute/path/to/clean-delivery"
+python3 "$BANK_ROOT/validate.py" "/absolute/path/to/clean-delivery" --delivery
+```
+
+The clean directory includes only Teacher-pass, manager-final questions whose current question snapshot, answer, three solver answers, and Teacher-solution hash agree. Per node it contains `questions.jsonl` and `answer_review.jsonl`; add `--include-source-assets` only when `reference.md` and the original question image should accompany delivery. It never copies `answer_final.jsonl`, `answers1/2/3.jsonl`, `.qb-review`, or invocation artifacts. Do not manually copy extra files into the package.
+
+For subject groups with at least 40 questions, delivery defaults to an A/B/C/D share gate of 15%–35% per option. Override the bounds only when the receiver specifies another contract. Fix skew during generation by moving complete option texts and rerunning 3+1; never change only the answer letter.
 
 ### Open the review console
 
@@ -137,7 +152,7 @@ python3 "$SKILL_ROOT/scripts/qb_manager.py" verify --bank "$BANK_ROOT"
 python3 "$SKILL_ROOT/scripts/qb_manager.py" export --bank "$BANK_ROOT"
 ```
 
-`export` atomically refreshes `<BANK_ROOT>/错题集.jsonl` from unresolved records. Never derive truth from answer-string majority alone.
+`export` atomically refreshes `<BANK_ROOT>/错题集.jsonl` from unresolved records and regenerates `answer_review.jsonl` with question/Teacher-solution hashes. Never derive truth from answer-string majority alone.
 
 ## Scale safely
 

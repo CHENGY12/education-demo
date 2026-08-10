@@ -148,6 +148,12 @@
                     "CONTRADICTORY",
                     "AMBIGUOUS",
                     "OPTION_SET_INVALID",
+                    "OPTION_CONTENT_MISPLACED",
+                    "INCOMPLETE_WORDING",
+                    "TERMINOLOGY_MISMATCH",
+                    "UNIT_DIMENSION_MISMATCH",
+                    "FORMULA_FORMAT_INVALID",
+                    "CONTROL_CHARACTER_PRESENT",
                     "IMAGE_TEXT_MISMATCH",
                     "REQUIRES_REVISION"
                   ]
@@ -182,6 +188,12 @@
                         "REMOVE_CONTRADICTION",
                         "DISAMBIGUATE_LANGUAGE",
                         "REPAIR_OPTIONS",
+                        "MOVE_OPTIONS_TO_FIELDS",
+                        "COMPLETE_WORDING",
+                        "ALIGN_TERMINOLOGY",
+                        "FIX_UNIT_DIMENSION",
+                        "NORMALIZE_FORMULA_FORMAT",
+                        "REMOVE_CONTROL_CHARACTERS",
                         "ALIGN_IMAGE_AND_TEXT"
                       ]
                     }
