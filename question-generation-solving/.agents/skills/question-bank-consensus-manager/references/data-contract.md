@@ -29,7 +29,7 @@
 
 `pending -> running -> final | disagreement | invalid | error`
 
-重解不会覆盖旧 attempt；它创建新的 run id。自动后核验兜底也必须是新的 child run，且最多一轮。人工接受任一候选后进入 `final`，同时保留全部旧 review。对已有 `answer_final.jsonl` 的题，扫描时会兼容导入为 final，但 `verify` 与交付 validator 仍要求它和权威 `questions.jsonl` 完全一致；旧产物不因被导入就自动获得新交付证书。
+用户从网页主动重解不会覆盖旧 attempt；它创建新的 run id。默认流程没有自动后核验兜底：已有题首轮不一致直接等待人工审查；生成题首轮失败不写入源文件，下一次扩题根据仍存在的配额缺口生成不同候选，并把旧失败题面列为禁重复项。历史版本留下的 `postverify` child run 只读兼容，不会被新流程创建。人工接受任一候选后进入 `final`，同时保留全部旧 review。对已有 `answer_final.jsonl` 的题，扫描时会兼容导入为 final，但 `verify` 与交付 validator 仍要求它和权威 `questions.jsonl` 完全一致；旧产物不因被导入就自动获得新交付证书。
 
 ## 交付契约
 
@@ -64,7 +64,7 @@
 
 每题至少包含 `verdict`、`answer_consistent`、`teacher_answer`、`teacher_solution`、`process_review`、逐 Agent 反馈、`retry_feedback`、`question_annotation`、可空 `skill_candidate` 和 `auto_promote`。`auto_promote` 是严格合取条件，不是多数票。
 
-`retry_feedback` 只有 `disposition`、固定 enum 的 `issue_codes` 与 `focus_codes`。Manager 按固定常量顺序规范化后才发送给下一轮；下一轮 request 禁止包含 Teacher 答案、解法、候选或 Agent 身份。`question_annotation.proposed_revision` 是 staged 数据，不会静默改写已 final 的原题。
+`retry_feedback` 是为兼容现有审计/UI 保留的结构化路由诊断，只有 `disposition`、固定 enum 的 `issue_codes` 与 `focus_codes`；新流程不会把它发送给 solver，也不会据此自动启动第二轮。通过题必须为 `none`，不一致题使用 `human_review`，题面需改使用 `question_revision`。`question_annotation.proposed_revision` 是 staged 数据，不会静默改写已 final 的原题。
 
 ## Solution skill 版本
 

@@ -61,7 +61,7 @@
             "properties": {
               "disposition": {
                 "type": "string",
-                "enum": ["none", "retry", "question_revision", "human_review"]
+                "enum": ["none", "question_revision", "human_review"]
               },
               "issue_codes": {
                 "type": "array",

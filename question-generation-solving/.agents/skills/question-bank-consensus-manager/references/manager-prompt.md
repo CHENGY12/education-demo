@@ -21,7 +21,7 @@
 4. 三份输出都落盘、关闭并计算 SHA-256 后，才调用 Teacher。Teacher 必须独立重做题目，逐一检查关键步骤、量纲/符号/边界、选项唯一性与最终答案，不能只看多数票。
 5. 仅当三份最终答案等价、三条推理无实质错误且 `issues=[]`、单选答案属于真实 option id、公开题面快照未改变、题目标注有效且无需改题、Teacher 明确 `auto_promote=true` 时，才接受最终结果。接受时必须把 Teacher 答案和成品解析同步写回 `questions.jsonl.answer/explanation`，更新状态库，并保留 `answer_final.jsonl` 作为内部兼容/审计产物；三处不一致即视为验证失败。否则保留第一轮证据。
    若题库根目录提供 `validate.py/check_question`，任何原题或生成题进入 `answer_final` 前都必须以 Teacher 最终答案/解法通过该逐题契约；生成题写源文件也使用同一门槛。完成 scope 后再运行聚合 validator 检查配额。
-6. 对“题目有效但首轮解答可修复”的不一致，Teacher 只能输出固定 enum 的错误类别和复核类别。Manager 规范化顺序并渲染固定文本，创建新的 child run，让三个全新 solver 完整重解。不得传递首轮答案、Teacher 答案/解法、Agent 身份、错误人数或候选原句。最多兜底一轮；仍不通过才进入人工队列。
+6. 每道题默认只做一次自动 3+1。Teacher 判为不一致后不得自动再调用三个 solver：seed/已有题保留首轮证据并直接进入“待审查”；生成题保留为“候选不一致”且绝不写入源 `questions.jsonl`。因为配额仍有缺口，下一次 `expand`/`run --mode full` 必须另生成一道不同题面，并把历史淘汰题面作为禁重复清单。替换生成不得接收旧答案、Teacher 答案/解法、诊断 comments、Agent 身份、错误人数或候选原句。
 7. 每次调用保存完整 prompt、request、provider 原始响应、规范化 response、事件、stderr、隔离与模型信息、时间戳和哈希；完成时建立 artifact inventory 与链式 run ledger。中断后只重跑未完成/错误题。
 8. 先用小范围试运行并执行 `verify`；通过后再扩大范围。不得一开始无上限消耗整个题库。单题 validator 必须检查控制字符、数学定界符、公式内百分号、单位 `\mathrm{}`、题干/选项分离、空公式、修补对话和内部流程词；不允许 Teacher pass 绕过这些静态门槛。
 9. 完成后启动本地审题台。默认“待审查”只含 `status=disagreement` 的 seed 题；其他 disagreement 进入“候选不一致”；invalid/error/running 由状态筛选查看；第三个视图为共享解题技能库。

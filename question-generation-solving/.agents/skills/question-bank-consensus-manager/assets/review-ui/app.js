@@ -56,7 +56,7 @@ const annotationStatusLabels = {
 
 const retryDispositionLabels = {
   none: "无需重试",
-  retry: "进入兜底重解",
+  retry: "历史自动重解（新流程已停用）",
   question_revision: "建议修订题面",
   human_review: "转人工复核",
 };
@@ -628,10 +628,10 @@ function roundLabel(round, index, rounds, currentRunId) {
   const current = text(round.run_id) === text(currentRunId);
   const fallback = /^postverify/i.test(text(round.run_id));
   const first = index === rounds.length - 1;
-  if (current && fallback) return "当前轮 · 兜底轮";
+  if (current && fallback) return "当前轮 · 历史兜底轮";
   if (current && first) return "当前轮 · 首轮";
   if (current) return "当前轮";
-  if (fallback) return "兜底轮";
+  if (fallback) return "历史兜底轮";
   if (first) return "首轮";
   return "历史重解轮";
 }
@@ -672,7 +672,7 @@ function roundTeacher(round) {
 function renderRetryDiagnostics(round) {
   const retry = round.retry_feedback;
   const section = el("section", "retry-diagnostics");
-  section.append(el("p", "solution-label", "ENUM-ONLY RETRY DIAGNOSTICS"));
+  section.append(el("p", "solution-label", "TEACHER ROUTING DIAGNOSTICS · 不自动重解"));
   if (!retry || typeof retry !== "object") {
     section.append(el("p", "muted", "本轮没有 retry_feedback。"));
     return section;

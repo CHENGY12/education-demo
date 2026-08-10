@@ -1,7 +1,8 @@
 # Question-bank consensus workflow
 
 This repository includes a reusable Codex skill for large-scale question-bank
-generation, three-way independent solving, Teacher verification, one safe retry,
+generation, three-way independent solving, single-pass Teacher verification,
+replacement generation for rejected generated questions,
 auditable final writeback, strict delivery validation, and browser-based human review.
 
 ## Included files

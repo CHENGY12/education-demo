@@ -131,11 +131,11 @@
           <summary>
             <span>
               <span class="eyebrow">AUDIT HISTORY</span>
-              <strong>查看首轮、兜底轮与历史解题记录</strong>
+              <strong>查看首轮、人工重解与历史记录</strong>
             </span>
             <span id="rounds-count" class="mono"></span>
           </summary>
-          <p class="rounds-note">当前轮仍在上方完整展示；这里按轮汇总全部三个独立 Solver、Teacher 与 enum-only retry diagnostics，当前轮会重复列出以便对照。</p>
+          <p class="rounds-note">当前轮仍在上方完整展示；这里按轮汇总三个独立 Solver、Teacher 与路由诊断。新流程不会因首轮不一致自动再跑 3+1；历史兜底轮仅用于兼容旧审计记录。</p>
           <div id="rounds-list" class="rounds-list"></div>
         </details>
 

@@ -255,50 +255,73 @@ class FakePartialBatchRunner(FakeRunner):
         return payload, meta
 
 
-class FakeRetryRunner(FakeRunner):
-    """Fail the first blind round, then pass only when safe retry codes arrive."""
+class FakeLegacyRetryFeedbackRunner(FakeRunner):
+    """Emit the retired retry disposition to prove it cannot trigger another 3+1."""
+
+    def __init__(self):
+        super().__init__(disagree=True)
+        self.roles: list[str] = []
 
     def run(self, *, role, prompt, schema_path, invocation_dir, request, images=(), progress=None):
+        self.roles.append(role)
         if role.startswith("solver"):
-            is_retry = any(
-                isinstance(item, dict) and item.get("verification_feedback")
-                for item in request.get("questions", [])
-            )
-            return FakeRunner(disagree=not is_retry).run(
-                role=role,
-                prompt=prompt,
-                schema_path=schema_path,
-                invocation_dir=invocation_dir,
-                request=request,
-                images=images,
+            return super().run(
+                role=role, prompt=prompt, schema_path=schema_path,
+                invocation_dir=invocation_dir, request=request, images=images,
                 progress=progress,
             )
         if role == "teacher":
-            is_retry = any(
-                isinstance(item, dict) and item.get("verification_feedback")
-                for item in request.get("questions", [])
-            )
-            payload, meta = FakeRunner(disagree=not is_retry).run(
-                role=role,
-                prompt=prompt,
-                schema_path=schema_path,
-                invocation_dir=invocation_dir,
-                request=request,
-                images=images,
+            payload, meta = super().run(
+                role=role, prompt=prompt, schema_path=schema_path,
+                invocation_dir=invocation_dir, request=request, images=images,
                 progress=progress,
             )
-            if not is_retry:
-                for review in payload["reviews"]:
-                    review["retry_feedback"] = {
-                        "disposition": "retry",
-                        "issue_codes": ["wrong_model", "answer_process_mismatch"],
-                        "focus_codes": ["derive_independently", "cross_check_second_method"],
-                    }
+            for review in payload["reviews"]:
+                review["retry_feedback"] = {
+                    "disposition": "retry",
+                    "issue_codes": ["wrong_model", "answer_process_mismatch"],
+                    "focus_codes": ["derive_independently", "cross_check_second_method"],
+                }
             raw = qb.compact_json(payload)
             qb.atomic_write_text(invocation_dir / "response.json", raw)
             meta["response_sha256"] = qb.sha256_text(raw)
             return payload, meta
         raise AssertionError(role)
+
+
+class FakeRegenerationRunner(FakeExpandRunner):
+    """Reject one generated candidate, then create a distinct replacement next run."""
+
+    def __init__(self):
+        super().__init__()
+        self.generation_count = 0
+        self.roles: list[str] = []
+        self.generation_requests: list[dict] = []
+
+    def run(self, *, role, prompt, schema_path, invocation_dir, request, images=(), progress=None):
+        self.roles.append(role)
+        if role == "generator-solver":
+            self.generation_count += 1
+            self.generation_requests.append(json.loads(json.dumps(request, ensure_ascii=False)))
+            payload, meta = super().run(
+                role=role, prompt=prompt, schema_path=schema_path,
+                invocation_dir=invocation_dir, request=request, images=images,
+                progress=progress,
+            )
+            if self.generation_count > 1:
+                replacement = payload["questions"][0]
+                replacement["prompt"] = "一辆小车 5 s 匀速通过 15 m，速度为（　）"
+                replacement["solution"] = "v=s/t=15/5=3 m/s。"
+                replacement["independent_check"] = "3×5=15。"
+                raw = qb.compact_json(payload)
+                qb.atomic_write_text(invocation_dir / "response.json", raw)
+                meta["response_sha256"] = qb.sha256_text(raw)
+            return payload, meta
+        return FakeRunner(disagree=self.generation_count == 1).run(
+            role=role, prompt=prompt, schema_path=schema_path,
+            invocation_dir=invocation_dir, request=request, images=images,
+            progress=progress,
+        )
 
 
 class FakeSkillRunner(FakeRunner):
@@ -751,19 +774,27 @@ class ManagerTests(unittest.TestCase):
             reviews_after = conn.execute("SELECT COUNT(*) FROM reviews").fetchone()[0]
         self.assertEqual(reviews_after, reviews_before)
 
-    def test_code_only_post_verification_retry_uses_fresh_run_and_can_promote(self) -> None:
+    def test_teacher_retry_diagnostic_does_not_trigger_automatic_second_round(self) -> None:
+        teacher_schema = json.loads(
+            (Path(qb.__file__).parent / "teacher_batch.schema.json").read_text(encoding="utf-8")
+        )
+        dispositions = teacher_schema["properties"]["reviews"]["items"]["properties"][
+            "retry_feedback"
+        ]["properties"]["disposition"]["enum"]
+        self.assertNotIn("retry", dispositions)
         qb.scan_bank(self.state)
         row = self.rows()[0]
         pipeline = qb.Pipeline(self.state, model=None, max_agent_processes=3)
-        pipeline.runner = FakeRetryRunner()
-        run_id = qb.new_run_id("retry-parent")
+        runner = FakeLegacyRetryFeedbackRunner()
+        pipeline.runner = runner
+        run_id = qb.new_run_id("single-round")
         run_dir = pipeline.create_manifest(run_id, "test", {"fixture": True})
         counts = pipeline.audit_rows([row], run_id=run_id, run_dir=run_dir)
         pipeline.finish_manifest(run_dir, counts)
-        self.assertEqual(counts, {"final": 1, "disagreement": 0, "invalid": 0, "error": 0})
+        self.assertEqual(counts, {"final": 0, "disagreement": 1, "invalid": 0, "error": 0})
         current = qb.get_question_row(self.state, row["question_key"])
-        self.assertEqual(current["status"], "final")
-        self.assertNotEqual(current["current_run_id"], run_id)
+        self.assertEqual(current["status"], "disagreement")
+        self.assertEqual(current["current_run_id"], run_id)
         with self.state.connect() as conn:
             reviews = list(
                 conn.execute(
@@ -777,29 +808,12 @@ class ManagerTests(unittest.TestCase):
                     (row["question_key"],),
                 )
             )
-        self.assertEqual(len(reviews), 2)
-        self.assertEqual(len(attempts), 6)
-        child_run = str(current["current_run_id"])
-        child_dir = self.state.runs_dir / child_run
-        requests = []
-        for agent_id in ("solver1", "solver2", "solver3"):
-            request = json.loads(
-                (child_dir / "retry-round-0002" / agent_id / "request.json").read_text(
-                    encoding="utf-8"
-                )
-            )
-            requests.append(request)
-            serialized = qb.compact_json(request)
-            self.assertNotIn("teacher_answer", serialized)
-            self.assertNotIn("teacher_solution", serialized)
-            self.assertNotIn("candidate_sha256", serialized)
-            feedback = request["questions"][0]["verification_feedback"]
-            self.assertEqual(
-                feedback["issue_codes"],
-                ["wrong_model", "answer_process_mismatch"],
-            )
-        self.assertEqual(requests[0]["questions"], requests[1]["questions"])
-        self.assertEqual(requests[1]["questions"], requests[2]["questions"])
+        self.assertEqual(len(reviews), 1)
+        self.assertEqual(len(attempts), 3)
+        self.assertEqual(sorted(runner.roles), ["solver1", "solver2", "solver3", "teacher"])
+        self.assertFalse(any(path.name.startswith("postverify") for path in self.state.runs_dir.iterdir()))
+        stored_review = json.loads(reviews[0]["raw_json"])
+        self.assertEqual(stored_review["retry_feedback"]["disposition"], "retry")
         verified = qb.verify_state(self.state)
         self.assertTrue(verified["ok"], verified["errors"])
 
@@ -1023,6 +1037,64 @@ class ManagerTests(unittest.TestCase):
         self.assertFalse(errors)
         self.assertEqual(len(after), 15)
         self.assertEqual(qb.quota_deficits(after)["low"]["display"], 0)
+
+    def test_failed_generated_question_is_replaced_on_next_expand(self) -> None:
+        rows = []
+        allocation = {
+            "low": {"display": 2, "exam": 2},
+            "mid": {"display": 3, "exam": 2},
+            "high": {"display": 3, "exam": 2},
+        }
+        index = 0
+        for difficulty, pools in allocation.items():
+            for pool, count in pools.items():
+                for _ in range(count):
+                    index += 1
+                    item = question(f"replace-{index:02d}")
+                    item["difficulty"] = difficulty
+                    item["pool"] = pool
+                    rows.append(item)
+        qb.atomic_write_jsonl(self.node / "questions.jsonl", rows)
+        pipeline = qb.Pipeline(self.state, model=None, max_agent_processes=3)
+        runner = FakeRegenerationRunner()
+        pipeline.runner = runner
+
+        first = pipeline.expand(
+            scope=None,
+            subject=None,
+            node_limit=1,
+            auto_promote=True,
+            dry_run=False,
+        )
+        self.assertEqual(first["result"]["generated"], 1)
+        self.assertEqual(first["result"]["disagreement"], 1)
+        self.assertEqual(first["result"]["regeneration_needed"], 1)
+        after_first, errors = qb.read_jsonl(self.node / "questions.jsonl")
+        self.assertFalse(errors)
+        self.assertEqual(len(after_first), 14)
+        self.assertEqual(qb.quota_deficits(after_first)["low"]["display"], 1)
+        self.assertEqual(len(runner.roles), 4)
+
+        second = pipeline.expand(
+            scope=None,
+            subject=None,
+            node_limit=1,
+            auto_promote=True,
+            dry_run=False,
+        )
+        self.assertEqual(second["result"]["generated"], 1)
+        self.assertEqual(second["result"]["final"], 1)
+        self.assertEqual(second["result"]["regeneration_needed"], 0)
+        rejected = runner.generation_requests[1]["rejected_generated_questions"]
+        self.assertEqual(len(rejected), 1)
+        self.assertIn("4 s 匀速通过 12 m", rejected[0]["prompt"])
+        after_second, errors = qb.read_jsonl(self.node / "questions.jsonl")
+        self.assertFalse(errors)
+        self.assertEqual(len(after_second), 15)
+        self.assertEqual(qb.quota_deficits(after_second)["low"]["display"], 0)
+        self.assertIn("5 s 匀速通过 15 m", after_second[-1]["prompt"])
+        self.assertEqual(len(runner.roles), 8)
+        self.assertFalse(any(path.name.startswith("postverify") for path in self.state.runs_dir.iterdir()))
 
     def test_run_targets_accepts_absolute_and_relative_dirs_as_one_batch(self) -> None:
         node_two = self.bank / "school" / "物理" / "node-2"

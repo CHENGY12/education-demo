@@ -23,7 +23,7 @@ API 模式：responses（速度优先；只有我明确要求排队吞吐时才�
 2. 使用本项目的 question-bank-consensus-manager runner。先 doctor，再用同一目标列表执行 run --dry-run；路径、题数和配额合理后立即执行正式 run，不需要二次确认。
 3. full 模式必须同时做举一反三生成与试做、另外两路独立解题、Teacher 独立重做和过程核验，也必须审校目录内原有题目。禁止在当前聊天上下文里假装三路独立解题。
 4. 每个 --target 原样、逐项传给一键命令；使用 `--provider auto`。CLI 启用 strict 隔离；API 必须 `store=false` 且禁用 tools/conversation/previous response。检查 question 图片只含题面；若像素含答案、解析或批注，只暂停受影响目录。
-5. 首轮 Teacher 发现可修复不一致时，使用 enum-only diagnostics 自动做且只做一轮全新 3+1 兜底；不得把旧答案或具体解法给新 solver。第二轮仍不通过才留给用户。
+5. 每题只做一次自动 3+1。Teacher 判为不一致后不自动重解：seed/已有题直接进入“待审查”；生成题保留首轮证据但不写入 `questions.jsonl`，下一次运行按仍未满足的配额生成不同的新题，并排除历史淘汰题面。不得把旧答案、Teacher comments 或具体解法传给替换生成 Agent。
 6. 正式运行后执行 verify、export 和题库自带 validator。接受结果必须同步更新 `questions.jsonl` 的 answer/explanation；`answer_final.jsonl` 仅作内部兼容与审计，不能成为交付答案源。失败题保留在网页队列，不删除运行记录，不覆盖无关文件。
 7. 启动 127.0.0.1:8765 审题网页并保持进程运行。默认“待审查”只含 status=disagreement 的 seed 题；其他 disagreement 放“候选不一致”；invalid/error/running 通过状态筛选查看；技能库单独可浏览和按提示生成版本。为每个目标目录重复传入一个 `serve --scope`。
 8. 对严格一致且真正有通用复用价值的解法，去题目化、核验证据并去重后写入共享解题 skill 库；不要求方法全新。所有 solver 可独立参考同一 skill 快照。人工确认的分歧解法也异步判断是否值得提炼。

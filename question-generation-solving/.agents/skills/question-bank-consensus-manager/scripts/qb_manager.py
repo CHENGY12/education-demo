@@ -84,42 +84,6 @@ DISABLED_AGENT_FEATURES = (
     "workspace_dependencies",
 )
 
-RETRY_ISSUE_LABELS = {
-    "misread_condition": "重新核对题干条件及所求量，首轮存在读题偏差",
-    "wrong_model": "重新从基本规律建模，首轮所用模型可能不适用",
-    "invalid_assumption": "逐项验证隐含假设及定律适用条件",
-    "algebra_error": "独立重做代数变形并逐步复核",
-    "arithmetic_error": "独立重算数值步骤并做代回检查",
-    "sign_direction_error": "重新约定正方向并检查符号与方向",
-    "unit_dimension_error": "逐式检查单位和量纲",
-    "boundary_check_failed": "使用边界、极端或特殊情形复核",
-    "option_uniqueness_error": "逐项验证选项并检查唯一性",
-    "unsupported_conclusion": "补齐从条件到结论的证据链",
-    "contradictory_reasoning": "定位并消除推理链内部矛盾",
-    "incomplete_reasoning": "补足决定最终结论的关键步骤",
-    "image_interpretation_error": "重新独立读取题图条件，不沿用首轮解释",
-    "question_ambiguous": "先判断题意是否存在多种合理解释",
-    "question_incomplete": "先检查题面是否缺少完成求解所需条件",
-    "no_unique_answer": "先检查题目是否确有唯一答案",
-    "answer_process_mismatch": "检查最终结论是否由前述过程真实推出",
-}
-
-RETRY_FOCUS_LABELS = {
-    "reread_conditions": "重新列出全部已知、未知和限制条件",
-    "rebuild_model": "从第一性原理重新建立模型",
-    "derive_independently": "不要修补旧解，完整独立推导",
-    "verify_applicability": "核验每条公式或定律的适用条件",
-    "check_algebra": "逐行检查代数与数值计算",
-    "check_units": "用单位和量纲复核",
-    "check_signs": "用统一正方向检查符号",
-    "test_boundary_cases": "用边界或极端情形复核",
-    "verify_each_option": "逐项代入或排除并确认唯一性",
-    "cross_check_second_method": "至少使用一种独立方法交叉核验",
-    "inspect_image_only": "独立读取题图中的条件",
-    "assess_question_validity": "先判断题面完整、无矛盾且答案唯一",
-}
-
-
 class ManagerError(RuntimeError):
     pass
 
@@ -330,7 +294,6 @@ class State:
                         "teacher_disagreement": "max",
                         "skill": "xhigh"
                     },
-                    "post_verify_retry": True,
                     "solution_skills": {
                         "enabled": True,
                         "max_context_skills": 5,
@@ -839,7 +802,6 @@ def sanitized_question(
     row: sqlite3.Row,
     guidance: str = "",
     *,
-    retry_feedback: dict[str, Any] | None = None,
     solution_skills: Sequence[dict[str, Any]] = (),
 ) -> dict[str, Any]:
     question = json.loads(row["question_json"])
@@ -864,34 +826,7 @@ def sanitized_question(
     snapshot.pop("user_guidance", None)
     snapshot.pop("solution_skills", None)
     result["question_snapshot_sha256"] = sha256_text(compact_json(snapshot))
-    if retry_feedback:
-        result["verification_feedback"] = retry_feedback
     return result
-
-
-def render_retry_feedback(review: dict[str, Any]) -> dict[str, Any] | None:
-    """Render a code-only Teacher diagnosis without carrying any prior answer."""
-    raw = review.get("retry_feedback")
-    if not isinstance(raw, dict) or str(raw.get("disposition")) != "retry":
-        return None
-    requested_issues = {str(code) for code in raw.get("issue_codes", [])}
-    requested_focus = {str(code) for code in raw.get("focus_codes", [])}
-    # Canonical manager order prevents the Teacher from using list ordering as
-    # a covert low-bandwidth hint about an answer or a preferred derivation.
-    issue_codes = [code for code in RETRY_ISSUE_LABELS if code in requested_issues]
-    focus_codes = [code for code in RETRY_FOCUS_LABELS if code in requested_focus]
-    if not issue_codes or not focus_codes:
-        return None
-    payload = {
-        "round": 2,
-        "issue_codes": issue_codes,
-        "focus_codes": focus_codes,
-        "observed_problems": [RETRY_ISSUE_LABELS[code] for code in issue_codes],
-        "required_checks": [RETRY_FOCUS_LABELS[code] for code in focus_codes],
-        "safety_note": "只描述首轮错误类型与复核重点；不包含首轮答案、Teacher 答案或具体解法。",
-    }
-    payload["feedback_sha256"] = sha256_text(compact_json(payload))
-    return payload
 
 
 def node_question_image(state: State, node_dir: str) -> Path | None:
@@ -3288,10 +3223,8 @@ class Pipeline:
         run_dir: Path,
         guidance: str = "",
         guidance_by_key: dict[str, str] | None = None,
-        retry_feedback_by_key: dict[str, dict[str, Any]] | None = None,
         prefilled: dict[str, dict[str, dict[str, Any]]] | None = None,
         auto_promote: bool = True,
-        allow_post_verify_retry: bool | None = None,
         progress: Callable[[int, str], None] | None = None,
         batch_label: str = "batch-0001",
     ) -> dict[str, int]:
@@ -3305,9 +3238,6 @@ class Pipeline:
             progress(5, f"跳过 {requested_count - len(rows)} 道被其他 run 占用的题")
         keys = [row["question_key"] for row in rows]
         guidance_by_key = guidance_by_key or {}
-        retry_feedback_by_key = retry_feedback_by_key or {}
-        if allow_post_verify_retry is None:
-            allow_post_verify_retry = bool(self.state.config().get("post_verify_retry", True))
         question_skills = {
             str(row["question_key"]): solution_skill_context_for_question(self.state, row)
             for row in rows
@@ -3316,7 +3246,6 @@ class Pipeline:
             sanitized_question(
                 row,
                 guidance_by_key.get(str(row["question_key"]), guidance),
-                retry_feedback=retry_feedback_by_key.get(str(row["question_key"])),
                 solution_skills=question_skills[str(row["question_key"])],
             )
             for row in rows
@@ -3495,8 +3424,6 @@ class Pipeline:
             question_payload_by_key = {
                 str(question.get("id", "")): question for question in questions
             }
-            fallback_feedback: dict[str, dict[str, Any]] = {}
-            fallback_rows: list[sqlite3.Row] = []
             for row in rows:
                 key = row["question_key"]
                 if key not in ready_key_set:
@@ -3551,18 +3478,11 @@ class Pipeline:
                         for item in feedback
                     )
                 )
-                expected_retry = retry_feedback_by_key.get(key)
-                diagnostic_guard = True
-                if expected_retry:
-                    expected_issues = set(map(str, expected_retry.get("issue_codes", [])))
-                    expected_focus = set(map(str, expected_retry.get("focus_codes", [])))
-                    diagnostic_guard = all(
-                        set(map(str, candidates[key][agent_id].get("diagnostic_issue_codes_checked", [])))
-                        == expected_issues
-                        and set(map(str, candidates[key][agent_id].get("diagnostic_focus_codes_checked", [])))
-                        == expected_focus
-                        for agent_id in ("solver1", "solver2", "solver3")
-                    )
+                diagnostic_guard = all(
+                    candidates[key][agent_id].get("diagnostic_issue_codes_checked", []) == []
+                    and candidates[key][agent_id].get("diagnostic_focus_codes_checked", []) == []
+                    for agent_id in ("solver1", "solver2", "solver3")
+                )
                 provided_skill_ids = {
                     str(item.get("skill_id", ""))
                     for item in question_skills.get(key, [])
@@ -3677,71 +3597,6 @@ class Pipeline:
                         solution=str(review.get("teacher_solution", "")),
                     )
                     counts[status] += 1
-                    retry_payload = render_retry_feedback(review)
-                    if (
-                        allow_post_verify_retry
-                        and status == "disagreement"
-                        and retry_payload is not None
-                    ):
-                        fallback_feedback[key] = retry_payload
-                        fallback_rows.append(row)
-            if fallback_rows:
-                if progress:
-                    progress(88, f"Teacher 已给出诊断；{len(fallback_rows)} 题进入一次兜底重解")
-                child_run_id = new_run_id("postverify")
-                child_request = {
-                    "parent_run_id": run_id,
-                    "trigger": "teacher_code_only_retry_feedback",
-                    "question_feedback": {
-                        key: {
-                            "feedback_sha256": value["feedback_sha256"],
-                            "issue_codes": value["issue_codes"],
-                            "focus_codes": value["focus_codes"],
-                        }
-                        for key, value in fallback_feedback.items()
-                    },
-                    "max_retry_rounds": 1,
-                }
-                child_dir = self.create_manifest(
-                    child_run_id,
-                    "post_verification_retry",
-                    child_request,
-                )
-                child_error = ""
-                try:
-                    child_counts = self.audit_rows(
-                        fallback_rows,
-                        run_id=child_run_id,
-                        run_dir=child_dir,
-                        guidance_by_key={
-                            key: guidance_by_key.get(key, guidance)
-                            for key in fallback_feedback
-                        },
-                        retry_feedback_by_key=fallback_feedback,
-                        auto_promote=auto_promote,
-                        allow_post_verify_retry=False,
-                        progress=progress,
-                        batch_label="retry-round-0002",
-                    )
-                except Exception as exc:
-                    child_error = str(exc)
-                    child_counts = {"final": 0, "disagreement": 0, "invalid": 0, "error": 0}
-                    for retry_row in fallback_rows:
-                        status = str(get_question_row(self.state, retry_row["question_key"])["status"])
-                        child_counts[status if status in child_counts else "error"] += 1
-                self.finish_manifest(
-                    child_dir,
-                    {
-                        "parent_run_id": run_id,
-                        "counts": child_counts,
-                        "error": child_error or None,
-                    },
-                )
-                counts["disagreement"] = max(
-                    0, counts["disagreement"] - len(fallback_rows)
-                )
-                for status, value in child_counts.items():
-                    counts[status] += value
             if progress:
                 progress(95, "Teacher 审核已落盘")
             return counts
@@ -3929,6 +3784,7 @@ class Pipeline:
             "invalid": 0,
             "error": 0,
             "normalized": 0,
+            "regeneration_needed": 0,
         }
         template = load_prompt("generator-solver-prompt.md")
         for index, (qfile, existing, deficits, _) in enumerate(nodes, 1):
@@ -3936,6 +3792,33 @@ class Pipeline:
             node_dir = run_dir / f"node-{index:04d}-{sha256_text(node_rel)[:10]}"
             ref_path = qfile.parent / "reference.md"
             reference = ref_path.read_text(encoding="utf-8") if ref_path.exists() else ""
+            with self.state.connect() as conn:
+                prior_rejected_rows = list(
+                    conn.execute(
+                        "SELECT question_json,status FROM questions "
+                        "WHERE node_dir=? AND source_kind='generated' "
+                        "AND status IN ('disagreement','invalid','error') "
+                        "ORDER BY updated_at DESC",
+                        (node_rel,),
+                    )
+                )
+            rejected_generated_questions: list[dict[str, str]] = []
+            rejected_prompts: set[str] = set()
+            for rejected_row in prior_rejected_rows:
+                rejected_question = json.loads(rejected_row["question_json"])
+                rejected_prompt = str(rejected_question.get("prompt", "")).strip()
+                if not rejected_prompt or rejected_prompt in rejected_prompts:
+                    continue
+                rejected_prompts.add(rejected_prompt)
+                if len(rejected_generated_questions) < 40:
+                    rejected_generated_questions.append(
+                        {
+                            "difficulty": str(rejected_question.get("difficulty", "")),
+                            "pool": str(rejected_question.get("pool", "")),
+                            "prompt": rejected_prompt,
+                            "status": str(rejected_row["status"]),
+                        }
+                    )
             request = {
                 "node_dir": node_rel,
                 "node_id": qfile.parent.name,
@@ -3953,6 +3836,7 @@ class Pipeline:
                 ],
                 "target_counts": quotas,
                 "deficits_before_classification": deficits,
+                "rejected_generated_questions": rejected_generated_questions,
             }
             request["solution_skills"] = solution_skill_context_for_text(
                 self.state,
@@ -3972,6 +3856,7 @@ class Pipeline:
             images = [p for p in sorted(qfile.parent.glob("question.*")) if p.suffix.lower() in {".png", ".jpg", ".jpeg", ".webp"}]
             print(f"[{index}/{len(nodes)}] 生成 {node_rel}", flush=True)
             generated_rows: list[sqlite3.Row] = []
+            generated_candidate_keys: set[str] = set()
             try:
                 total["normalized"] += apply_safe_format_repairs(self.state, qfile)
                 needs_generation = (
@@ -4004,8 +3889,12 @@ class Pipeline:
                 ]
                 prompts = [str(item.get("prompt", "")).strip() for item in generated_items]
                 existing_prompts = {str(item.get("prompt", "")).strip() for item in existing}
-                if len(set(prompts)) != len(prompts) or any(prompt in existing_prompts for prompt in prompts):
-                    raise ManagerError("生成题与现有题或同批生成题重复")
+                if (
+                    len(set(prompts)) != len(prompts)
+                    or any(prompt in existing_prompts for prompt in prompts)
+                    or any(prompt in rejected_prompts for prompt in prompts)
+                ):
+                    raise ManagerError("生成题与现有题、历史淘汰题或同批生成题重复")
                 for generated in generated_items:
                     validate_generated_question(generated)
                 selected_items, quota_overflow = cap_generated_to_deficits(
@@ -4022,6 +3911,8 @@ class Pipeline:
                     qid = f"pb_{subject_name}_{qfile.parent.name}_gen_{prompt_hash}"
                     qfile_rel = safe_rel(qfile, self.state.bank)
                     key = question_key(qfile_rel, qid)
+                    if id(generated) not in overflow_ids:
+                        generated_candidate_keys.add(key)
                     question = {
                         "id": qid,
                         "nodeId": qfile.parent.name,
@@ -4144,6 +4035,11 @@ class Pipeline:
                     )
                 print(f"  ERROR: {exc}", file=sys.stderr, flush=True)
                 total["error"] += 1
+            total["regeneration_needed"] += sum(
+                1
+                for key in generated_candidate_keys
+                if str(get_question_row(self.state, key)["status"]) != "final"
+            )
         export_unresolved(self.state)
         result = {**preview, "run_id": run_id, "result": total}
         self.finish_manifest(run_dir, result)

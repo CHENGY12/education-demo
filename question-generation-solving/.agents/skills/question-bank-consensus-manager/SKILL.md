@@ -1,6 +1,6 @@
 ---
 name: question-bank-consensus-manager
-description: Orchestrate reproducible large-scale question-bank expansion and answer verification with three isolated solver agents, a fourth teacher agent, automatic Codex CLI or OpenAI API execution, one safe post-verification retry, an evolving solution-skill library, auditable artifacts, and a local human-review web console. Use when a directory tree contains questions.jsonl/reference.md/question images and needs 举一反三 generation, independent multi-agent solving, strict answer_final routing, disagreement review, skill extraction, or interactive re-solving.
+description: Orchestrate reproducible large-scale question-bank expansion and answer verification with three isolated solver agents, a fourth teacher agent, automatic Codex CLI or OpenAI API execution, single-pass verification, replacement generation for rejected generated questions, an evolving solution-skill library, auditable artifacts, and a local human-review web console. Use when a directory tree contains questions.jsonl/reference.md/question images and needs 举一反三 generation, independent multi-agent solving, strict answer_final routing, disagreement review, skill extraction, or interactive re-solving.
 ---
 
 # Question Bank Consensus Manager
@@ -17,8 +17,8 @@ Manage the whole question-bank lifecycle while keeping the three candidate solut
 5. Let the teacher inspect all three processes, independently recompute the answer, and explicitly decide whether auto-promotion is safe.
 6. Auto-promote only when all three answers are equivalent, every material reasoning chain is correct, the question is valid, the teacher returns `auto_promote=true`, and the bank's per-question validator accepts the exact Teacher answer and solution.
 7. Treat a user's re-solve hint as guidance, not ground truth. Show it to all three fresh solvers identically.
-8. When the first Teacher finds a repairable disagreement, retain that run and perform at most one new 3+1 round. The new solvers receive only canonical enum error categories and check categories; never pass the first answers, Teacher answer, concrete derivation, candidate count, or Agent identity.
-9. Require `issues=[]` for every fully-correct solver, a valid option id for multiple choice, an unchanged public question snapshot, a valid/no-revision question annotation, and a clear retry contract before automatic final writeback.
+8. Run exactly one automatic 3+1 round per question. A seed/existing disagreement goes directly to human review. A rejected generated question is never written to source; a later `expand`/`run` creates a distinct replacement for the still-open quota and excludes prior rejected stems. Never feed prior answers, Teacher diagnostics, concrete derivations, vote counts, or Agent identities into replacement generation.
+9. Require `issues=[]` for every fully-correct solver, a valid option id for multiple choice, an unchanged public question snapshot, a valid/no-revision question annotation, and a clear `retry_feedback=none` routing contract before automatic final writeback.
 
 The local runner enforces these boundaries. Do not replace it with three calls in one conversational context.
 
@@ -84,7 +84,7 @@ python3 "$SKILL_ROOT/scripts/qb_manager.py" expand \
   --limit 1
 ```
 
-The generator is also candidate solver 1 for newly generated questions. Solvers 2 and 3 receive only the generated stem and options. For both seed and generated questions, an accepted final synchronizes the Teacher answer/solution into authoritative `questions.jsonl`, the database, and the internal compatibility `answer_final.jsonl`; unresolved generated questions remain in the review state until a human decision.
+The generator is also candidate solver 1 for newly generated questions. Solvers 2 and 3 receive only the generated stem and options. For both seed and generated questions, an accepted final synchronizes the Teacher answer/solution into authoritative `questions.jsonl`, the database, and the internal compatibility `answer_final.jsonl`. A failed generated candidate remains as auditable **候选不一致** data but is not added to `questions.jsonl`; rerun `expand` (or `run --mode full`) to fill the still-open quota with a new stem. The next generator request contains only the prior rejected stems/statuses as a do-not-repeat list, never their answers, solutions, or Teacher comments.
 
 When the bank root provides `validate.py` with `check_question(q, line_no)`, the runner executes that per-question contract before **any** existing or generated question can enter final; source writeback uses the same gate. The bundled contract rejects control characters, LaTeX outside math, unescaped formula percentages, naked units, option dumps in stems, letter-only options, empty formulas, repair chatter, and internal review terms. After finishing a scope, also run the bank's aggregate quota validator:
 
@@ -128,7 +128,7 @@ Open `http://127.0.0.1:8765`. Keep the server process running. The UI can:
 - paginate through arbitrarily large result sets instead of truncating the queue.
 - default to **待审查**, containing only `seed` questions whose status is `disagreement`; place other disagreement items in **候选不一致**. Invalid/error/running/final remain available through the status filter and global job tray.
 - browse the shared **解题技能库**, inspect immutable versions and provenance, and submit a guidance-based revision guarded by the current SHA-256.
-- inspect the first and fallback 3+1 rounds plus staged question-quality annotations. Proposed question revisions are not silently applied to an already-finalized item.
+- inspect the automatic first round, user-requested re-solves, legacy fallback rounds, and staged question-quality annotations. New runs never launch an automatic fallback; proposed question revisions are not silently applied to an already-finalized item.
 
 Pass one `--scope` for every target directory or glob. This keeps unrelated banks out of the UI and also blocks detail, image, accept, and re-solve API calls for questions outside those scopes.
 
