@@ -98,9 +98,14 @@ python3 "$BANK_ROOT/validate.py" "cn-nanjing-g11-2026/物理"
 
 ### Prepare a delivery package
 
-First refresh derived review records, then let the validator build a new directory outside the bank:
+First run the separate answer-stripped re-solve, refresh derived review records, then let the validator build a new directory outside the bank:
 
 ```bash
+python3 "$SKILL_ROOT/scripts/qb_manager.py" blind-recheck \
+  --bank "$BANK_ROOT" \
+  --target "cn-nanjing-g11-2026/物理" \
+  --batch-size 15 \
+  --isolation strict
 python3 "$SKILL_ROOT/scripts/qb_manager.py" export --bank "$BANK_ROOT"
 python3 "$BANK_ROOT/validate.py" "cn-nanjing-g11-2026/物理" \
   --prepare-delivery "/absolute/path/to/clean-delivery"
@@ -111,7 +116,7 @@ The clean directory includes only Teacher-pass, manager-final questions whose cu
 
 The package root also contains a deterministic `manifest.json` covering every `questions.jsonl` path, byte size, SHA-256, question count, and aggregate difficulty/pool/answer counts. `--delivery` recomputes it and fails on drift. It also rejects AppleDouble files, `.DS_Store`, `__MACOSX`, and directory names containing ` copy`.
 
-Static validation and the generation-time 3+1 certificate are necessary but not sufficient for delivery. Before release, perform one answer-stripped blind re-solve that cannot see `answer`, `explanation`, the first-round candidates, or Teacher conclusions. This is a final delivery QA pass, not the removed automatic retry after a disagreement. If it exposes a generated-question defect, reject that generated candidate and let a later expansion create a different stem; do not send the wrong answer or concrete derivation to replacement generation.
+Static validation and the generation-time 3+1 certificate are necessary but not sufficient for delivery. `blind-recheck` sends each final's answer-free snapshot to one fresh isolated solver and persists a content-bound certificate in `answer_review.jsonl`; it cannot see `answer`, `explanation`, the first-round candidates, Teacher conclusions, guidance, or solution skills. This is a final delivery QA pass, not the removed automatic retry after a disagreement. If it exposes a generated-question defect, the manager removes that candidate from authoritative `questions.jsonl`; rerun `expand`, then `blind-recheck`, until quotas are full. Existing/seed mismatches enter human review. Never send the wrong answer or concrete derivation to replacement generation.
 
 For subject groups with at least 40 questions, delivery defaults to an A/B/C/D share gate of 15%–35% per option. Override the bounds only when the receiver specifies another contract. Fix skew during generation by moving complete option texts and rerunning 3+1; never change only the answer letter.
 

@@ -30,7 +30,7 @@
 10. 用户在网页确认某份解答后，原子 upsert 到 `answer_final.jsonl`、追加人工决策，并异步判断是否应提炼一个去题目化的新 skill。
 11. 用户输入提示或解法重做时，把同一份指导交给三个全新 solver；后台运行时仍可浏览下一题。用户修订 skill 时，用当前 SHA 做乐观锁，结构化生成完整新版本，不把 guidance 原文直接写入文件。
 12. 仅从严格通过且确有通用复用价值的题自动创建/更新 skill；新颖性只作记录，不是硬门槛。仍执行去题目化检查、证据检查与相似度去重。所有 solver 可独立参考相同的相关 skill 快照，但必须重新验证，不能把 skill 当作答案。
-13. 模型流程完成后先运行 `export`，生成带 `question_snapshot_sha256` 和 `teacher_solution_sha256` 的 `answer_review.jsonl`；再用题库 `validate.py --prepare-delivery <全新目录>` 生成交付件。交付目录只允许根部 `manifest.json`，每个节点含 `questions.jsonl`、`answer_review.jsonl`，可选复制 `question.png/jpg` 与 `reference.md`；严禁交付 `answer_final.jsonl`、`answers1/2/3.jsonl`、数据库或 invocation 产物。
+13. 模型首轮完成后，对目标运行 `blind-recheck --target <目标>`；生成题盲解不一致时运行 `expand` 补新题，再对新增 final 重跑 `blind-recheck`，直到配额完整且每道可交付 final 都有当前证书。随后运行 `export`，生成带 `question_snapshot_sha256`、`teacher_solution_sha256` 和 `blind_recheck.final_content_sha256` 的 `answer_review.jsonl`；再用题库 `validate.py --prepare-delivery <全新目录>` 生成交付件。交付目录只允许根部 `manifest.json`，每个节点含 `questions.jsonl`、`answer_review.jsonl`，可选复制 `question.png/jpg` 与 `reference.md`；严禁交付 `answer_final.jsonl`、`answers1/2/3.jsonl`、数据库或 invocation 产物。
 14. 交付打包必须过滤所有非 `teacher_verdict=pass`、非 `manager_status=final`、`auto_promote!=true`、`correct!=true` 或三路不一致的题，并逐题核对当前题面快照、`questions.answer == teacher_answer`、`questions.explanation` 哈希和三名 solver 答案。任一 pass 记录哈希过期或答案冲突时整批失败，不能静默选一份答案。核验节点单字母占比 ≤40%，并按科目审计 A/B/C/D 分布；调整完整选项顺序后必须重新 3+1，禁止只改 `answer`。交付包还必须无 macOS 资源叉/` copy` 目录，且自动生成并复算 `manifest.json`。
 15. 静态全绿与首轮 3+1 记录不能单独证明真实答案正确。正式交付前必须对去掉 `answer`、`explanation`、首轮解答和 Teacher 结论的题面做一次独立盲解复核；它是交付 QA，不是 Teacher 不一致后的自动兜底。发现真实题目/答案问题时，seed 进入人工审查；生成题作废并由下一次扩题生成不同候选，不把错误答案或具体解法反馈给替换生成 Agent。
 

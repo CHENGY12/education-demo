@@ -116,8 +116,13 @@ MATH_NAKED_UNIT = re.compile(
     rf"(?:\\,\s*({UNIT_TOKEN})|(?<=[0-9}})])\s+({UNIT_TOKEN})|"
     rf"(?<=[0-9}})])({COMPOUND_UNIT_TOKEN}))(?![A-Za-z])"
 )
-MALFORMED_SUPERSCRIPT = re.compile(r"\^(?:\(|[-+]\s*[A-Za-z0-9]|[A-Za-z0-9]{2,})")
-MALFORMED_SUBSCRIPT = re.compile(r"_(?:\(|[-+]\s*[A-Za-z0-9]|[A-Za-z0-9]{2,})")
+# TeX consumes exactly one token after an unbraced ``^``/``_``.  Therefore
+# ``I^2R`` and ``U_MI`` are valid (the trailing R/I is a baseline symbol), as
+# is the checklist's ``m_1m_2``.  Reject only cases whose first intended token
+# is visibly grouped/sign-bearing, plus unbraced multi-digit tokens.  The old
+# ``[A-Za-z0-9]{2,}`` rule falsely rejected most ordinary physics products.
+MALFORMED_SUPERSCRIPT = re.compile(r"\^(?:\(|[-+]\s*[A-Za-z0-9]|\d{2,})")
+MALFORMED_SUBSCRIPT = re.compile(r"_(?:\(|[-+]\s*[A-Za-z0-9]|\d{2,})")
 EMPTY_EQUATION = re.compile(r"^\s*[^=\n]{1,80}=\s*$")
 MISSING_LATEX_BACKSLASH = re.compile(
     r"(?<![\\A-Za-z])(?:times|cdot|frac|dfrac|tfrac|sqrt|rightarrow|to|approx|"
@@ -531,6 +536,21 @@ def question_snapshot_sha256(question: dict[str, Any], key: str) -> str:
     return sha256_text(compact_json(snapshot))
 
 
+def final_content_sha256(question: dict[str, Any], key: str) -> str:
+    """Hash the exact final whose answer-free snapshot was independently solved."""
+    return sha256_text(
+        compact_json(
+            {
+                "question_snapshot_sha256": question_snapshot_sha256(question, key),
+                "answer": str(question.get("answer", "")),
+                "explanation_sha256": sha256_text(
+                    str(question.get("explanation", ""))
+                ),
+            }
+        )
+    )
+
+
 def _review_errors(
     question: dict[str, Any],
     review: dict[str, Any],
@@ -580,6 +600,28 @@ def _review_errors(
         errors.append("answer_review 缺 teacher_solution_sha256；请用新版 manager 重新 export")
     elif actual_solution != expected_solution:
         errors.append("questions.explanation 与 Teacher 最终解法哈希不一致")
+    blind = review.get("blind_recheck")
+    if not isinstance(blind, dict):
+        errors.append("缺少剥离答案独立复核证书；请运行新版 manager blind-recheck 后重新 export")
+    else:
+        if blind.get("status") != "pass" or blind.get("matched") is not True:
+            errors.append("blind_recheck 不是 matched pass")
+        if blind.get("question_valid") is not True:
+            errors.append("blind_recheck 未确认题目有效且答案唯一")
+        blind_answer = re.sub(r"\s+", "", str(blind.get("answer", ""))).upper()
+        current_answer = re.sub(r"\s+", "", answer).upper()
+        if not blind_answer or blind_answer != current_answer:
+            errors.append("blind_recheck 独立答案与 questions.answer 不一致")
+        if str(blind.get("question_snapshot_sha256", "")) != expected_snapshot:
+            errors.append("blind_recheck 题面快照与当前 questions.jsonl 不一致")
+        if str(blind.get("final_content_sha256", "")) != final_content_sha256(
+            question, expected_key
+        ):
+            errors.append("blind_recheck 最终内容哈希与当前题面/答案/解析不一致")
+        if not re.fullmatch(r"[0-9a-f]{64}", str(blind.get("response_sha256", ""))):
+            errors.append("blind_recheck 缺少有效 response_sha256")
+        if not str(blind.get("run_id", "")).strip():
+            errors.append("blind_recheck 缺少 run_id")
     return errors
 
 

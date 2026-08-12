@@ -63,6 +63,19 @@ def review_for(question: dict, qfile: Path, bank: Path) -> dict:
         "process_review": "三路过程与教师复算均通过。",
         "run_id": "run-1",
         "reviewed_on": "2026-08-10T00:00:00+00:00",
+        "blind_recheck": {
+            "status": "pass",
+            "matched": True,
+            "answer": answer,
+            "question_valid": True,
+            "question_snapshot_sha256": validator.question_snapshot_sha256(
+                question, key
+            ),
+            "final_content_sha256": validator.final_content_sha256(question, key),
+            "response_sha256": "a" * 64,
+            "run_id": "blind-run-1",
+            "checked_on": "2026-08-10T01:00:00+00:00",
+        },
     }
 
 
@@ -91,6 +104,15 @@ class PerQuestionValidationTests(unittest.TestCase):
         errors = self.errors(question)
         self.assertIn("% 未写成", errors)
         self.assertIn("指数须写成", errors)
+
+    def test_single_token_scripts_followed_by_baseline_symbols_are_valid(self) -> None:
+        question = valid_question()
+        question["explanation"] = (
+            "由 $P_R=I^2R$ 与 $U_MI=13.5\\,\\mathrm{W}$ 得结论。故选B。"
+        )
+        errors = self.errors(question)
+        self.assertNotIn("多字符、带符号或括号指数", errors)
+        self.assertNotIn("多字符、带符号或括号下标", errors)
 
     def test_naked_units_are_rejected_inside_and_outside_math(self) -> None:
         question = valid_question()
@@ -214,6 +236,16 @@ class DeliveryValidationTests(unittest.TestCase):
         self.assertIn("不一致", joined)
         self.assertIn("auto_promote", joined)
         self.assertIn("不得包含 answer_final.jsonl", joined)
+
+    def test_delivery_rejects_missing_or_stale_blind_recheck(self) -> None:
+        reviews, _ = validator._read_jsonl(self.node / "answer_review.jsonl")
+        reviews[0]["blind_recheck"] = None
+        reviews[1]["blind_recheck"]["final_content_sha256"] = "0" * 64
+        write_jsonl(self.node / "answer_review.jsonl", reviews)
+        errors, _, _ = validator.check_delivery_node(self.qfile, bank_root=self.bank)
+        joined = "\n".join(errors)
+        self.assertIn("缺少剥离答案独立复核证书", joined)
+        self.assertIn("最终内容哈希", joined)
 
     def test_prepare_delivery_filters_nonpass_and_writes_only_contract_files(self) -> None:
         reviews, _ = validator._read_jsonl(self.node / "answer_review.jsonl")

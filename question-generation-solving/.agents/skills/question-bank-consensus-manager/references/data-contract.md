@@ -8,7 +8,7 @@
 - `reference.md`：知识点、考查要点和原题文字。
 - `question.png` / `question.jpg`：可选原题图。
 - `answer_final.jsonl`：内部兼容/审计输出，每行 `{id, answer, solution}`；不进入交付包。
-- `answer_review.jsonl`：Teacher 的派生审查记录，可从状态库重建；交付记录包含 `question_snapshot_sha256` 与 `teacher_solution_sha256`，用于证明复核题面、最终答案和 `questions.explanation` 没有漂移。
+- `answer_review.jsonl`：Teacher 的派生审查记录，可从状态库重建；交付记录包含 `question_snapshot_sha256`、`teacher_solution_sha256` 与 `blind_recheck`。盲解证书以 `final_content_sha256` 绑定当前题面快照、答案和解析哈希，并保留独立响应 SHA-256/run id。
 
 根目录输出：
 
@@ -42,7 +42,7 @@
 
 交付包根目录必须另含 `manifest.json`，逐个记录 `questions.jsonl` 的相对路径、题数、SHA-256 和字节数，并汇总节点数、题数、难度、池和答案分布。validator 会复算整份清单；包内不得出现 `._*`、`.DS_Store`、`__MACOSX/` 或名称含 ` copy` 的目录。
 
-不得包含 `answer_final.jsonl`、`answers1.jsonl`、`answers2.jsonl`、`answers3.jsonl`、`.qb-review` 或原始 Agent invocation。进入交付的每道题必须恰有一条 review，且 `teacher_verdict=pass`、`correct=true`、`answer_consistent=true`、`manager_status=final`、`auto_promote=true`，三名 solver 答案与 Teacher 相同、题面快照哈希相同、`questions.answer` 与 `teacher_answer` 相同、`questions.explanation` 与 Teacher 解法哈希相同。非 pass/final 题直接排除；标成 pass 却哈希或答案冲突时整批失败。
+不得包含 `answer_final.jsonl`、`answers1.jsonl`、`answers2.jsonl`、`answers3.jsonl`、`.qb-review` 或原始 Agent invocation。进入交付的每道题必须恰有一条 review，且 `teacher_verdict=pass`、`correct=true`、`answer_consistent=true`、`manager_status=final`、`auto_promote=true`，三名 solver 答案与 Teacher 相同、题面快照哈希相同、`questions.answer` 与 `teacher_answer` 相同、`questions.explanation` 与 Teacher 解法哈希相同；还必须有 `blind_recheck.status=pass`、`matched=true`、独立答案一致且题面/最终内容哈希匹配的当前证书。非 pass/final 或无当前盲解证书的题直接排除；标成 pass 却哈希或答案冲突时整批失败。
 
 逐题静态契约还拒绝控制字符、数学环境外的 LaTeX/上下标、公式内裸 `%`、裸单位、题干重复选项、单字母选项、Markdown 表格选项、空公式、生成修补对话及内部审校用语。整批按科目检查 A/B/C/D 分布；修正分布只能交换完整选项并重新核验，不能孤立修改答案字母。
 

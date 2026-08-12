@@ -50,7 +50,7 @@ REFERENCE_ROOT = SKILL_ROOT / "references"
 SCRIPT_ROOT = SKILL_ROOT / "scripts"
 STATE_DIRNAME = ".qb-review"
 SOLUTION_SKILLS_DIRNAME = "解题技能库"
-SCHEMA_VERSION = "2"
+SCHEMA_VERSION = "3"
 STATUSES = ("pending", "running", "final", "disagreement", "invalid", "error")
 UNRESOLVED_STATUSES = ("disagreement", "invalid", "error")
 FILE_LOCK = threading.RLock()
@@ -266,6 +266,7 @@ class State:
         self.solution_skills_root = self.bank / SOLUTION_SKILLS_DIRNAME
         self.skill_events_path = self.root / "solution-skill-events.jsonl"
         self.skill_versions_root = self.root / "solution-skill-versions"
+        self.blind_rechecks_path = self.root / "blind-rechecks.jsonl"
 
     def ensure(self) -> None:
         self.root.mkdir(parents=True, exist_ok=True)
@@ -398,6 +399,25 @@ class State:
                     FOREIGN KEY(question_key) REFERENCES questions(question_key)
                 );
                 CREATE INDEX IF NOT EXISTS idx_reviews_question ON reviews(question_key, created_at);
+                CREATE TABLE IF NOT EXISTS blind_rechecks (
+                    question_key TEXT NOT NULL,
+                    run_id TEXT NOT NULL,
+                    answer TEXT NOT NULL,
+                    solution TEXT NOT NULL,
+                    independent_check TEXT NOT NULL,
+                    question_valid INTEGER NOT NULL,
+                    matched INTEGER NOT NULL,
+                    question_snapshot_sha256 TEXT NOT NULL,
+                    final_content_sha256 TEXT NOT NULL,
+                    invocation_dir TEXT NOT NULL,
+                    prompt_sha256 TEXT NOT NULL,
+                    response_sha256 TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    PRIMARY KEY(question_key, run_id),
+                    FOREIGN KEY(question_key) REFERENCES questions(question_key)
+                );
+                CREATE INDEX IF NOT EXISTS idx_blind_rechecks_question
+                    ON blind_rechecks(question_key, created_at);
                 CREATE TABLE IF NOT EXISTS jobs (
                     job_id TEXT PRIMARY KEY,
                     question_key TEXT NOT NULL,
@@ -2404,6 +2424,110 @@ def store_review(
         )
 
 
+def store_blind_recheck(
+    state: State,
+    *,
+    row: sqlite3.Row,
+    run_id: str,
+    solution: dict[str, Any],
+    matched: bool,
+    invocation_dir: Path,
+    meta: dict[str, Any],
+    expected_final_sha256: str,
+) -> None:
+    attempt_number = meta.get("attempt")
+    artifact_dir = invocation_dir
+    if isinstance(attempt_number, int):
+        candidate = invocation_dir / f"try-{attempt_number:02d}"
+        if candidate.is_dir():
+            artifact_dir = candidate
+    record = {
+        "question_key": str(row["question_key"]),
+        "id": str(row["qid"]),
+        "node_dir": str(row["node_dir"]),
+        "run_id": run_id,
+        "answer": str(solution.get("answer", "")),
+        "question_valid": bool(solution.get("question_valid")),
+        "matched": matched,
+        "question_snapshot_sha256": public_question_snapshot_sha256(row),
+        "final_content_sha256": expected_final_sha256,
+        "invocation_dir": safe_rel(artifact_dir, state.root),
+        "prompt_sha256": str(meta.get("prompt_sha256", "")),
+        "response_sha256": str(meta.get("response_sha256", "")),
+        "created_at": utc_now(),
+    }
+    with state.connect() as conn:
+        conn.execute(
+            """
+            INSERT OR REPLACE INTO blind_rechecks(
+                question_key,run_id,answer,solution,independent_check,
+                question_valid,matched,question_snapshot_sha256,final_content_sha256,
+                invocation_dir,prompt_sha256,response_sha256,created_at
+            ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)
+            """,
+            (
+                row["question_key"],
+                run_id,
+                record["answer"],
+                str(solution.get("solution", "")),
+                str(solution.get("independent_check", "")),
+                int(record["question_valid"]),
+                int(matched),
+                record["question_snapshot_sha256"],
+                expected_final_sha256,
+                record["invocation_dir"],
+                record["prompt_sha256"],
+                record["response_sha256"],
+                record["created_at"],
+            ),
+        )
+    append_jsonl(state.blind_rechecks_path, record)
+
+
+def latest_valid_blind_recheck(
+    state: State, row: sqlite3.Row
+) -> sqlite3.Row | None:
+    """Return the newest passing certificate for the exact current final bytes."""
+    expected_snapshot = public_question_snapshot_sha256(row)
+    expected_final = final_content_sha256(row)
+    with state.connect() as conn:
+        return conn.execute(
+            """
+            SELECT * FROM blind_rechecks
+            WHERE question_key=? AND matched=1 AND question_valid=1
+              AND question_snapshot_sha256=? AND final_content_sha256=?
+            ORDER BY created_at DESC,run_id DESC LIMIT 1
+            """,
+            (row["question_key"], expected_snapshot, expected_final),
+        ).fetchone()
+
+
+def remove_rejected_generated_final_from_source(state: State, row: sqlite3.Row) -> None:
+    """Remove a generated final that failed the separate blind delivery gate."""
+    if str(row["source_kind"]) != "generated":
+        return
+    qfile = state.bank / str(row["question_file"])
+    questions, errors = read_jsonl(qfile)
+    if errors:
+        raise ManagerError("盲解淘汰写回前源 JSONL 已损坏: " + errors[0])
+    qid = str(row["qid"])
+    matching = [item for item in questions if str(item.get("id", "")) == qid]
+    if len(matching) != 1:
+        raise ManagerError(f"盲解淘汰时源题 {qid!r} 数量不是 1")
+    if compact_json(matching[0]) != compact_json(json.loads(row["question_json"])):
+        raise ManagerError(f"盲解期间源题 {qid!r} 已变化，拒绝自动移除")
+    atomic_write_jsonl(qfile, [item for item in questions if str(item.get("id", "")) != qid])
+    final_path = state.bank / str(row["node_dir"]) / "answer_final.jsonl"
+    if final_path.is_file():
+        finals, final_errors = read_jsonl(final_path)
+        if final_errors:
+            raise ManagerError("盲解淘汰前 answer_final 已损坏: " + final_errors[0])
+        atomic_write_jsonl(
+            final_path,
+            [item for item in finals if str(item.get("id", "")) != qid],
+        )
+
+
 def public_question_snapshot(row: sqlite3.Row) -> dict[str, Any]:
     """Return the exact answer-free question snapshot shown to solvers."""
     value = sanitized_question(row)
@@ -2416,6 +2540,19 @@ def public_question_snapshot(row: sqlite3.Row) -> dict[str, Any]:
 
 def public_question_snapshot_sha256(row: sqlite3.Row) -> str:
     return sha256_text(compact_json(public_question_snapshot(row)))
+
+
+def final_content_sha256(row: sqlite3.Row) -> str:
+    question = json.loads(row["question_json"])
+    return sha256_text(
+        compact_json(
+            {
+                "question_snapshot_sha256": public_question_snapshot_sha256(row),
+                "answer": str(question.get("answer", "")),
+                "explanation_sha256": sha256_text(str(question.get("explanation", ""))),
+            }
+        )
+    )
 
 
 def store_question_annotation(
@@ -3086,6 +3223,7 @@ class Pipeline:
         prompt_names = [
             "generator-solver-prompt.md",
             "solver-prompt.md",
+            "blind-recheck-prompt.md",
             "teacher-prompt.md",
             "skill-extractor-prompt.md",
             "skill-editor-prompt.md",
@@ -3158,6 +3296,13 @@ class Pipeline:
                 "WHERE run_id=? ORDER BY question_key",
                 (run_id,),
             )]
+            blind_rechecks = [dict(row) for row in conn.execute(
+                "SELECT question_key,answer,question_valid,matched,"
+                "question_snapshot_sha256,final_content_sha256,prompt_sha256,"
+                "response_sha256,created_at FROM blind_rechecks "
+                "WHERE run_id=? ORDER BY question_key",
+                (run_id,),
+            )]
             decisions = [dict(row) for row in conn.execute(
                 "SELECT decision_id,question_key,source,answer,created_at FROM decisions "
                 "WHERE run_id=? ORDER BY created_at,decision_id",
@@ -3199,6 +3344,7 @@ class Pipeline:
             "questions": questions,
             "attempts": attempts,
             "reviews": reviews,
+            "blind_rechecks": blind_rechecks,
             "decisions": decisions,
             "solution_skill_versions": skill_versions,
             "bank_file_sha256_at_finish": dict(sorted(file_hashes.items())),
@@ -3718,6 +3864,237 @@ class Pipeline:
                 total[key] += value
         export_unresolved(self.state)
         result = {**preview, "run_id": run_id, "result": total}
+        self.finish_manifest(run_dir, result)
+        return result
+
+    def blind_recheck(
+        self,
+        *,
+        targets: Sequence[str],
+        subject: str | None,
+        batch_size: int,
+        force: bool,
+        dry_run: bool,
+    ) -> dict[str, Any]:
+        """Independently re-solve current finals without exposing stored answers.
+
+        This is intentionally a separate one-agent delivery gate rather than a
+        fourth participant in the original consensus.  It receives only the
+        answer-free public snapshot, writes its own hashed invocation, and can
+        never promote a question.  A mismatch demotes an existing seed for
+        review; a generated mismatch is removed from the authoritative JSONL so
+        the normal expansion command can generate a fresh replacement.
+        """
+        scopes = normalize_target_scopes(self.state.bank, targets)
+        scan = scan_bank(self.state, scopes, subject)
+        files = resolve_scope(self.state.bank, scopes)
+        allowed_nodes = {safe_rel(path.parent, self.state.bank) for path in files}
+        placeholders = ",".join("?" for _ in allowed_nodes) or "''"
+        params: list[Any] = sorted(allowed_nodes)
+        sql = (
+            f"SELECT * FROM questions WHERE status='final' "
+            f"AND node_dir IN ({placeholders})"
+        )
+        if subject:
+            sql += " AND subject=?"
+            params.append(subject)
+        sql += " ORDER BY node_dir,qid"
+        with self.state.connect() as conn:
+            final_rows = list(conn.execute(sql, params))
+        rows = [
+            row
+            for row in final_rows
+            if force or latest_valid_blind_recheck(self.state, row) is None
+        ]
+        preview: dict[str, Any] = {
+            "scan": scan,
+            "targets": scopes,
+            "eligible_finals": len(final_rows),
+            "already_certified": len(final_rows) - len(rows),
+            "selected_questions": len(rows),
+            "batch_size": max(1, batch_size),
+            "dry_run": dry_run,
+        }
+        if dry_run or not rows:
+            return preview
+
+        run_id = new_run_id("blind-recheck")
+        run_dir = self.create_manifest(
+            run_id,
+            "blind-recheck",
+            {
+                "targets": scopes,
+                "subject": subject,
+                "selected_questions": len(rows),
+                "batch_size": max(1, batch_size),
+                "force": force,
+                "answer_exposure": False,
+            },
+        )
+        result_counts = {
+            "passed": 0,
+            "generated_rejected": 0,
+            "existing_disagreement": 0,
+            "error": 0,
+        }
+        template = load_prompt("blind-recheck-prompt.md")
+        batches = [
+            rows[start : start + max(1, batch_size)]
+            for start in range(0, len(rows), max(1, batch_size))
+        ]
+        for index, batch in enumerate(batches, 1):
+            label = f"batch-{index:04d}"
+            print(
+                f"[盲解 {index}/{len(batches)}] {batch[0]['node_dir']} 起 · "
+                f"{len(batch)} 题",
+                flush=True,
+            )
+            questions: list[dict[str, Any]] = []
+            image_paths: list[Path] = []
+            seen_images: set[Path] = set()
+            expected_hashes: dict[str, str] = {}
+            for row in batch:
+                question = sanitized_question(row, solution_skills=())
+                # Make the absence of any hint or prior work explicit in the
+                # persisted request; the prompt is hashed independently too.
+                question["user_guidance"] = ""
+                image_path = question_node_image(self.state, row)
+                if image_path:
+                    resolved = image_path.resolve()
+                    question["image_attachment"] = safe_rel(resolved, self.state.bank)
+                    if resolved not in seen_images:
+                        image_paths.append(resolved)
+                        seen_images.add(resolved)
+                questions.append(question)
+                expected_hashes[str(row["question_key"])] = final_content_sha256(row)
+            request = {"questions": questions, "agent_id": "blind-recheck"}
+            prompt = render_prompt(
+                template,
+                {"QUESTION_BATCH_JSON": pretty_json({"questions": questions})},
+            )
+            invocation_dir = run_dir / label / "solver-blind-recheck"
+            try:
+                payload, meta = self.runner.run(
+                    role="solver-blind-recheck",
+                    prompt=prompt,
+                    schema_path=SCRIPT_ROOT / "solver_batch.schema.json",
+                    invocation_dir=invocation_dir,
+                    request=request,
+                    images=image_paths,
+                )
+                raw_solutions = payload.get("solutions", [])
+                if not isinstance(raw_solutions, list):
+                    raise ManagerError("盲解响应 solutions 不是数组")
+                solution_ids = [
+                    str(item.get("id", ""))
+                    for item in raw_solutions
+                    if isinstance(item, dict)
+                ]
+                expected_ids = [str(row["question_key"]) for row in batch]
+                if len(solution_ids) != len(set(solution_ids)):
+                    raise ManagerError("盲解响应含重复 id")
+                if set(solution_ids) != set(expected_ids):
+                    missing = sorted(set(expected_ids) - set(solution_ids))
+                    extra = sorted(set(solution_ids) - set(expected_ids))
+                    raise ManagerError(
+                        f"盲解响应 id 不完整：missing={missing[:3]} extra={extra[:3]}"
+                    )
+                solutions = {
+                    str(item["id"]): item
+                    for item in raw_solutions
+                    if isinstance(item, dict)
+                }
+                batch_results: list[dict[str, Any]] = []
+                for original_row in batch:
+                    key = str(original_row["question_key"])
+                    current = get_question_row(self.state, key)
+                    expected_hash = expected_hashes[key]
+                    if str(current["status"]) != "final":
+                        raise ManagerError(f"盲解期间题目状态变化: {key}")
+                    if final_content_sha256(current) != expected_hash:
+                        raise ManagerError(f"盲解期间题面或最终答案变化: {key}")
+                    solution = solutions[key]
+                    expected_answer = normalize_answer(
+                        json.loads(current["question_json"]).get("answer")
+                    )
+                    clean_diagnostics = (
+                        solution.get("diagnostic_issue_codes_checked") == []
+                        and solution.get("diagnostic_focus_codes_checked") == []
+                        and solution.get("solution_skill_ids_considered") == []
+                    )
+                    complete_reasoning = bool(str(solution.get("solution", "")).strip()) and bool(
+                        str(solution.get("independent_check", "")).strip()
+                    )
+                    matched = bool(
+                        solution.get("question_valid")
+                        and clean_diagnostics
+                        and complete_reasoning
+                        and expected_answer
+                        and normalize_answer(solution.get("answer")) == expected_answer
+                    )
+                    store_blind_recheck(
+                        self.state,
+                        row=current,
+                        run_id=run_id,
+                        solution=solution,
+                        matched=matched,
+                        invocation_dir=invocation_dir,
+                        meta=meta,
+                        expected_final_sha256=expected_hash,
+                    )
+                    if matched:
+                        result_counts["passed"] += 1
+                        outcome = "passed"
+                    else:
+                        source_kind = str(current["source_kind"])
+                        if source_kind == "generated":
+                            remove_rejected_generated_final_from_source(self.state, current)
+                            status = "invalid"
+                            outcome = "generated_rejected"
+                        else:
+                            status = "disagreement"
+                            outcome = "existing_disagreement"
+                        with self.state.connect() as conn:
+                            cursor = conn.execute(
+                                """
+                                UPDATE questions SET status=?,teacher_verdict=?,updated_at=?
+                                WHERE question_key=? AND status='final' AND question_json=?
+                                """,
+                                (
+                                    status,
+                                    "blind_recheck_mismatch",
+                                    utc_now(),
+                                    key,
+                                    current["question_json"],
+                                ),
+                            )
+                        if cursor.rowcount != 1:
+                            raise ManagerError(f"盲解淘汰写回发生并发变化: {key}")
+                        result_counts[outcome] += 1
+                    batch_results.append(
+                        {
+                            "question_key": key,
+                            "id": current["qid"],
+                            "source_kind": current["source_kind"],
+                            "matched": matched,
+                            "outcome": outcome,
+                            "expected_final_sha256": expected_hash,
+                            "response_sha256": str(meta.get("response_sha256", "")),
+                        }
+                    )
+                atomic_write_json(
+                    run_dir / label / "blind-recheck-results.json",
+                    {"run_id": run_id, "results": batch_results},
+                )
+            except Exception as exc:
+                result_counts["error"] += len(batch)
+                atomic_write_json(
+                    run_dir / label / "blind-recheck-error.json",
+                    {"run_id": run_id, "error": str(exc), "question_count": len(batch)},
+                )
+                print(f"  ERROR: {exc}", file=sys.stderr, flush=True)
+        export_unresolved(self.state)
+        result = {**preview, "run_id": run_id, "result": result_counts}
         self.finish_manifest(run_dir, result)
         return result
 
@@ -5245,6 +5622,16 @@ def export_unresolved(state: State) -> dict[str, int]:
         )
     unresolved: list[dict[str, Any]] = []
     reviews_by_node: dict[str, list[dict[str, Any]]] = {}
+    authoritative_ids_by_node: dict[str, set[str]] = {}
+    question_files = resolve_scope(state.bank, None)
+    for question_file in question_files:
+        node_dir = safe_rel(question_file.parent, state.bank)
+        source_rows, source_errors = read_jsonl(question_file)
+        if source_errors:
+            raise ManagerError("export 前 questions.jsonl 损坏: " + source_errors[0])
+        authoritative_ids_by_node[node_dir] = {
+            str(item.get("id", "")) for item in source_rows
+        }
     for item in rows:
         detail = question_detail(state, item["question_key"])
         unresolved.append(
@@ -5271,6 +5658,15 @@ def export_unresolved(state: State) -> dict[str, int]:
         if not review:
             continue
         row = get_question_row(state, key)
+        # Rejected generated candidates intentionally remain in SQLite and the
+        # unresolved audit log, but are not authoritative bank questions.  Do
+        # not leak their stale reviews into answer_review.jsonl, where the
+        # delivery validator correctly treats them as orphan records.
+        if str(row["qid"]) not in authoritative_ids_by_node.get(
+            detail["node_dir"], set()
+        ):
+            continue
+        blind = latest_valid_blind_recheck(state, row)
         reviews_by_node.setdefault(detail["node_dir"], []).append(
             {
                 "id": detail["id"],
@@ -5287,11 +5683,35 @@ def export_unresolved(state: State) -> dict[str, int]:
                 "process_review": review["process_review"],
                 "run_id": review["run_id"],
                 "reviewed_on": review["created_at"],
+                "blind_recheck": (
+                    {
+                        "status": "pass",
+                        "matched": True,
+                        "answer": blind["answer"],
+                        "question_valid": bool(blind["question_valid"]),
+                        "question_snapshot_sha256": blind[
+                            "question_snapshot_sha256"
+                        ],
+                        "final_content_sha256": blind["final_content_sha256"],
+                        "response_sha256": blind["response_sha256"],
+                        "run_id": blind["run_id"],
+                        "checked_on": blind["created_at"],
+                    }
+                    if blind is not None
+                    else None
+                ),
             }
         )
-    for node_dir, node_reviews in reviews_by_node.items():
-        atomic_write_jsonl(state.bank / node_dir / "answer_review.jsonl", node_reviews)
-    return {"unresolved": len(unresolved), "review_files": len(reviews_by_node)}
+    for node_dir in sorted(authoritative_ids_by_node):
+        node_reviews = reviews_by_node.get(node_dir, [])
+        atomic_write_jsonl(
+            state.bank / node_dir / "answer_review.jsonl",
+            sorted(node_reviews, key=lambda item: str(item.get("id", ""))),
+        )
+    return {
+        "unresolved": len(unresolved),
+        "review_files": len(authoritative_ids_by_node),
+    }
 
 
 def verify_state(state: State) -> dict[str, Any]:
@@ -5331,6 +5751,11 @@ def verify_state(state: State) -> dict[str, Any]:
         skill_version_rows = (
             list(conn.execute("SELECT * FROM solution_skill_versions"))
             if "solution_skill_versions" in table_names
+            else []
+        )
+        blind_rows = (
+            list(conn.execute("SELECT * FROM blind_rechecks"))
+            if "blind_rechecks" in table_names
             else []
         )
     finally:
@@ -5468,6 +5893,59 @@ def verify_state(state: State) -> dict[str, Any]:
             "无 v2 retry/annotation 字段；已按其原始 artifact 兼容核验"
         )
 
+    question_rows_by_key = {str(row["question_key"]): row for row in rows}
+    valid_blind_keys: set[str] = set()
+    for blind in blind_rows:
+        key = str(blind["question_key"])
+        question_row = question_rows_by_key.get(key)
+        if question_row is None:
+            errors.append(f"blind recheck {key}: 对应题目不存在")
+            continue
+        invocation_dir = state.root / str(blind["invocation_dir"])
+        invocation_root = (
+            invocation_dir.parent
+            if re.fullmatch(r"try-\d+", invocation_dir.name)
+            else invocation_dir
+        )
+        prompt_path = invocation_root / "prompt.md"
+        response_path = invocation_dir / "response.json"
+        if not prompt_path.is_file() or sha256_file(prompt_path) != blind["prompt_sha256"]:
+            errors.append(f"blind recheck {key}: prompt artifact 缺失或哈希不匹配")
+        if not response_path.is_file() or sha256_file(response_path) != blind["response_sha256"]:
+            errors.append(f"blind recheck {key}: response artifact 缺失或哈希不匹配")
+        if not bool(blind["matched"]):
+            continue
+        expected_snapshot = public_question_snapshot_sha256(question_row)
+        expected_final = final_content_sha256(question_row)
+        expected_answer = normalize_answer(
+            json.loads(question_row["question_json"]).get("answer")
+        )
+        if not bool(blind["question_valid"]):
+            errors.append(f"blind recheck {key}: matched 记录却未确认 question_valid")
+        if str(blind["question_snapshot_sha256"]) != expected_snapshot:
+            errors.append(f"blind recheck {key}: 题面快照哈希不匹配")
+        if str(blind["final_content_sha256"]) != expected_final:
+            errors.append(f"blind recheck {key}: final content 哈希不匹配")
+        if normalize_answer(blind["answer"]) != expected_answer:
+            errors.append(f"blind recheck {key}: 独立答案与最终答案不一致")
+        if (
+            bool(blind["question_valid"])
+            and str(blind["question_snapshot_sha256"]) == expected_snapshot
+            and str(blind["final_content_sha256"]) == expected_final
+            and normalize_answer(blind["answer"]) == expected_answer
+        ):
+            valid_blind_keys.add(key)
+    uncertified_final_keys = {
+        str(row["question_key"])
+        for row in rows
+        if str(row["status"]) == "final"
+    } - valid_blind_keys
+    if uncertified_final_keys:
+        warnings.append(
+            f"{len(uncertified_final_keys)} 道 final 尚无当前内容的独立盲解证书；"
+            "交付 validate.py --delivery 会拒绝这些题"
+        )
+
     versions_by_skill: dict[str, dict[int, sqlite3.Row]] = {}
     for version in skill_version_rows:
         skill_id = str(version["skill_id"])
@@ -5565,16 +6043,25 @@ def verify_state(state: State) -> dict[str, Any]:
                 if sha256_text(compact_json(request)) != invocation.get("request_sha256"):
                     errors.append(f"{request_path}: request SHA-256 不匹配")
                 role = str(invocation.get("role", ""))
-                if role in {"solver1", "solver2", "solver3"}:
+                if role in {
+                    "solver1",
+                    "solver2",
+                    "solver3",
+                    "solver-blind-recheck",
+                }:
                     modern_solver_contract = str(
                         invocation.get("contract_version") or ""
                     ) == SCHEMA_VERSION
                     if set(request) != {"questions", "agent_id"}:
                         errors.append(f"{request_path}: solver request 顶层字段不符合白名单")
-                    if str(request.get("agent_id", "")) != role:
+                    expected_agent_id = (
+                        "blind-recheck" if role == "solver-blind-recheck" else role
+                    )
+                    if str(request.get("agent_id", "")) != expected_agent_id:
                         errors.append(f"{request_path}: agent_id 与 invocation role 不一致")
-                    batch_key = invocation_path.parent.parent.resolve().as_posix()
-                    solver_inputs.setdefault(batch_key, {})[role] = request.get("questions")
+                    if role != "solver-blind-recheck":
+                        batch_key = invocation_path.parent.parent.resolve().as_posix()
+                        solver_inputs.setdefault(batch_key, {})[role] = request.get("questions")
                     solver_questions = request.get("questions")
                     if not isinstance(solver_questions, list):
                         errors.append(f"{request_path}: questions 必须是数组")
@@ -5628,6 +6115,14 @@ def verify_state(state: State) -> dict[str, Any]:
                                 )
                             ) != feedback_value.get("feedback_sha256"):
                                 errors.append(f"{request_path}: verification_feedback SHA-256 不匹配")
+                        if role == "solver-blind-recheck" and (
+                            question.get("user_guidance") != ""
+                            or question.get("solution_skills") != []
+                            or "verification_feedback" in question
+                        ):
+                            errors.append(
+                                f"{request_path}: 盲解 request 不得含 guidance、skill 或 Teacher feedback"
+                            )
                     marker = "QUESTION_BATCH_JSON\n"
                     if marker not in prompt_value:
                         errors.append(f"{prompt_path}: 缺少 QUESTION_BATCH_JSON 边界")
@@ -5942,6 +6437,8 @@ def verify_state(state: State) -> dict[str, Any]:
         "ok": not errors,
         "questions": len(rows),
         "reviews": len(review_rows),
+        "blind_rechecks": len(blind_rows),
+        "blind_certified_finals": len(valid_blind_keys),
         "agent_attempt_meta": len(meta_files),
         "solution_skills": len(skill_rows),
         "solution_skill_versions": len(skill_version_rows),
@@ -6804,6 +7301,23 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--no-auto-promote", action="store_true")
     p.add_argument("--dry-run", action="store_true")
 
+    p = subs.add_parser(
+        "blind-recheck",
+        help="剥离答案后用独立 Agent 重解 final，生成交付复核证书",
+    )
+    add_common(p)
+    add_agent_options(p)
+    p.add_argument(
+        "--target",
+        action="append",
+        required=True,
+        help="题库内目录或 questions.jsonl；可重复",
+    )
+    p.add_argument("--subject")
+    p.add_argument("--batch-size", type=int, default=15)
+    p.add_argument("--force", action="store_true", help="重新复核已有有效证书的 final")
+    p.add_argument("--dry-run", action="store_true")
+
     p = subs.add_parser("expand", help="生成缺失的举一反三题并核验")
     add_common(p)
     add_agent_options(p)
@@ -6902,7 +7416,13 @@ def main(argv: Sequence[str] | None = None) -> int:
             state.ensure()
             print(pretty_json(summary(state)), end="")
             return 0
-        if args.command in {"audit", "expand", "run", "curate-skills"}:
+        if args.command in {
+            "audit",
+            "blind-recheck",
+            "expand",
+            "run",
+            "curate-skills",
+        }:
             state.ensure()
             pipeline = Pipeline(
                 state,
@@ -6925,6 +7445,14 @@ def main(argv: Sequence[str] | None = None) -> int:
                     include_disagreements=args.include_disagreements,
                     force=args.force,
                     auto_promote=not args.no_auto_promote,
+                    dry_run=args.dry_run,
+                )
+            elif args.command == "blind-recheck":
+                result = pipeline.blind_recheck(
+                    targets=args.target,
+                    subject=args.subject,
+                    batch_size=max(1, args.batch_size),
+                    force=args.force,
                     dry_run=args.dry_run,
                 )
             elif args.command == "expand":

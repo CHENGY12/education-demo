@@ -176,6 +176,27 @@ class FakeExpandRunner(FakeRunner):
         }
 
 
+class FakeBlindMismatchRunner(FakeRunner):
+    def run(self, *, role, prompt, schema_path, invocation_dir, request, images=(), progress=None):
+        payload, meta = super().run(
+            role=role,
+            prompt=prompt,
+            schema_path=schema_path,
+            invocation_dir=invocation_dir,
+            request=request,
+            images=images,
+            progress=progress,
+        )
+        if role == "solver-blind-recheck":
+            for item in payload["solutions"]:
+                item["answer"] = "C"
+                item["solution"] = "独立重算得到另一选项。"
+            raw = qb.compact_json(payload)
+            qb.atomic_write_text(invocation_dir / "response.json", raw)
+            meta["response_sha256"] = qb.sha256_text(raw)
+        return payload, meta
+
+
 class FakeTwoExpandRunner(FakeExpandRunner):
     def run(self, *, role, prompt, schema_path, invocation_dir, request, images=(), progress=None):
         if role != "generator-solver":
@@ -604,6 +625,22 @@ class ManagerTests(unittest.TestCase):
         )
         self.assertEqual(parsed.qid_like, "%_seed_%")
 
+    def test_cli_parser_accepts_blind_recheck(self) -> None:
+        parsed = qb.build_parser().parse_args(
+            [
+                "blind-recheck",
+                "--bank",
+                str(self.bank),
+                "--target",
+                "school/物理",
+                "--batch-size",
+                "12",
+                "--dry-run",
+            ]
+        )
+        self.assertEqual(parsed.target, ["school/物理"])
+        self.assertEqual(parsed.batch_size, 12)
+
     def test_cli_parser_accepts_serve_scope(self) -> None:
         parsed = qb.build_parser().parse_args(
             ["serve", "--bank", str(self.bank), "--scope", "school/物理/*"]
@@ -739,6 +776,76 @@ class ManagerTests(unittest.TestCase):
         tampered = qb.verify_state(self.state)
         self.assertFalse(tampered["ok"])
         self.assertTrue(any("artifact inventory" in item for item in tampered["errors"]))
+
+    def test_blind_recheck_certifies_without_exposing_final_answer(self) -> None:
+        qb.scan_bank(self.state)
+        pipeline = qb.Pipeline(self.state, model=None, max_agent_processes=3)
+        pipeline.runner = FakeRunner()
+        initial_run = qb.new_run_id("initial")
+        initial_dir = pipeline.create_manifest(initial_run, "test", {"fixture": True})
+        counts = pipeline.audit_rows(self.rows(), run_id=initial_run, run_dir=initial_dir)
+        pipeline.finish_manifest(initial_dir, counts)
+
+        result = pipeline.blind_recheck(
+            targets=["school/物理"],
+            subject="物理",
+            batch_size=15,
+            force=False,
+            dry_run=False,
+        )
+        self.assertEqual(result["result"]["passed"], 2)
+        self.assertEqual(result["result"]["error"], 0)
+        with self.state.connect() as conn:
+            certificates = list(conn.execute("SELECT * FROM blind_rechecks"))
+        self.assertEqual(len(certificates), 2)
+        self.assertTrue(all(item["matched"] for item in certificates))
+        request_path = next(
+            (self.state.runs_dir / result["run_id"]).rglob(
+                "solver-blind-recheck/request.json"
+            )
+        )
+        serialized = request_path.read_text(encoding="utf-8")
+        self.assertNotIn('"answer"', serialized)
+        self.assertNotIn('"explanation"', serialized)
+        reviews, errors = qb.read_jsonl(self.node / "answer_review.jsonl")
+        self.assertFalse(errors)
+        self.assertTrue(all(item["blind_recheck"]["matched"] for item in reviews))
+
+    def test_blind_mismatch_removes_generated_candidate_from_authoritative_bank(self) -> None:
+        qb.atomic_write_jsonl(self.node / "questions.jsonl", [question("generated-only")])
+        qb.scan_bank(self.state)
+        row = self.rows()[0]
+        with self.state.connect() as conn:
+            conn.execute(
+                "UPDATE questions SET source_kind='generated' WHERE question_key=?",
+                (row["question_key"],),
+            )
+        row = qb.get_question_row(self.state, row["question_key"])
+        pipeline = qb.Pipeline(self.state, model=None, max_agent_processes=3)
+        pipeline.runner = FakeRunner()
+        initial_run = qb.new_run_id("generated-initial")
+        initial_dir = pipeline.create_manifest(initial_run, "test", {"fixture": True})
+        counts = pipeline.audit_rows([row], run_id=initial_run, run_dir=initial_dir)
+        pipeline.finish_manifest(initial_dir, counts)
+        self.assertEqual(counts["final"], 1)
+
+        pipeline.runner = FakeBlindMismatchRunner()
+        result = pipeline.blind_recheck(
+            targets=["school/物理"],
+            subject="物理",
+            batch_size=15,
+            force=False,
+            dry_run=False,
+        )
+        self.assertEqual(result["result"]["generated_rejected"], 1)
+        source_rows, errors = qb.read_jsonl(self.node / "questions.jsonl")
+        self.assertFalse(errors)
+        self.assertEqual(source_rows, [])
+        current = qb.get_question_row(self.state, row["question_key"])
+        self.assertEqual(current["status"], "invalid")
+        reviews, errors = qb.read_jsonl(self.node / "answer_review.jsonl")
+        self.assertFalse(errors)
+        self.assertEqual(reviews, [])
 
     def test_partial_batch_omissions_only_fail_affected_questions(self) -> None:
         qb.atomic_write_jsonl(
