@@ -127,6 +127,13 @@ class PerQuestionValidationTests(unittest.TestCase):
         question["explanation"] = "由 $F=2ma$ 可得结论。"
         self.assertNotIn("单位须用", self.errors(question))
 
+    def test_physics_mg_product_is_not_misread_as_milligram_unit(self) -> None:
+        question = valid_question()
+        question["explanation"] = "合力为 $0.5mg$，由牛顿第二定律可得结论。故选B。"
+        self.assertNotIn("单位须用", self.errors(question))
+        question["explanation"] = "质量为 $5\\,mg$，由题设可得结论。故选B。"
+        self.assertIn("单位须用", self.errors(question))
+
     def test_math_symbols_are_not_misread_as_chemical_elements(self) -> None:
         question = valid_question()
         question["subject"] = "数学"

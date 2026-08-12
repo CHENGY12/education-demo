@@ -231,7 +231,12 @@ def language_errors(value: str, *, locale: str | None) -> list[str]:
     return [f"香港题库须使用繁体中文，检测到简体字：{preview}{suffix}"]
 
 
-def formula_errors(value: str, *, check_chem: bool = True) -> list[str]:
+def formula_errors(
+    value: str,
+    *,
+    check_chem: bool = True,
+    check_physics: bool = False,
+) -> list[str]:
     errors: list[str] = []
     if ANSI_ESCAPE.search(value):
         errors.append(r"含 ANSI 终端转义码（写文件前设置 NO_COLOR=1）")
@@ -275,7 +280,19 @@ def formula_errors(value: str, *, check_chem: bool = True) -> list[str]:
             errors.append(r"数学环境中的 LaTeX 命令疑似丢失反斜杠")
         if CJK.search(stripped):
             errors.append(r"数学环境中的中文须用 \text{...} 包裹")
-        if MATH_NAKED_UNIT.search(stripped):
+        naked_units = list(MATH_NAKED_UNIT.finditer(stripped))
+        # In physics, an adjacent ``mg`` is conventionally the product of mass
+        # and gravitational acceleration (for example ``0.5mg``), not the
+        # milligram unit.  Spaced forms such as ``5 mg`` or ``5\,mg`` remain
+        # invalid units and are still caught.  This avoids rejecting a valid
+        # force expression while keeping the delivery-unit rule deterministic.
+        if check_physics:
+            naked_units = [
+                match
+                for match in naked_units
+                if not (match.group(3) == "mg" and match.group(0) == "mg")
+            ]
+        if naked_units:
             errors.append(r"数学环境中的单位须用 \mathrm{...}")
         if check_chem and CHEM.search(stripped):
             errors.append(r"化学式/元素须包 \mathrm{...}（否则显示成斜体）")
@@ -434,8 +451,16 @@ def check_question(
         "化學",
         "chemistry",
     }
+    check_physics = str(question.get("subject", "")).strip().lower() in {
+        "物理",
+        "physics",
+    }
     for field_name, value in _content_fields(question):
-        for violation in formula_errors(value, check_chem=check_chem):
+        for violation in formula_errors(
+            value,
+            check_chem=check_chem,
+            check_physics=check_physics,
+        ):
             errors.append(f"{field_name}：{violation}")
         for violation in language_errors(value, locale=locale):
             errors.append(f"{field_name}：{violation}")
