@@ -17,6 +17,7 @@ import datetime as dt
 import fnmatch
 import hashlib
 import http.server
+import inspect
 import json
 import mimetypes
 import os
@@ -53,7 +54,7 @@ SCHEMA_VERSION = "2"
 STATUSES = ("pending", "running", "final", "disagreement", "invalid", "error")
 UNRESOLVED_STATUSES = ("disagreement", "invalid", "error")
 FILE_LOCK = threading.RLock()
-VALIDATOR_CACHE: dict[str, Callable[[dict[str, Any], int], list[str]]] = {}
+VALIDATOR_CACHE: dict[str, Callable[..., list[str]]] = {}
 
 SOLVER_LENSES = {
     "solver1": "从第一性原理建立模型，完整推导后用代回或守恒关系复核。",
@@ -798,6 +799,15 @@ def get_question_row(state: State, key: str) -> sqlite3.Row:
     return row
 
 
+def language_variant_for_node(node_dir: str) -> str:
+    """Derive the required natural-language variant from the cohort path."""
+    normalized = str(node_dir).replace("\\", "/").lower()
+    parts = [part for part in normalized.split("/") if part]
+    if any(part.startswith("hk-") or "hongkong" in part for part in parts):
+        return "zh-Hant-HK"
+    return "zh-Hans-CN"
+
+
 def sanitized_question(
     row: sqlite3.Row,
     guidance: str = "",
@@ -819,12 +829,16 @@ def sanitized_question(
         "options": options,
         "difficulty": question.get("difficulty", ""),
         "question_type": "multiple_choice" if options else "open_response",
+        "language_variant": language_variant_for_node(str(row["node_dir"])),
         "user_guidance": guidance,
         "solution_skills": list(solution_skills),
     }
     snapshot = dict(result)
     snapshot.pop("user_guidance", None)
     snapshot.pop("solution_skills", None)
+    # The locale is deterministic transport metadata, not part of the public
+    # question JSONL snapshot used by delivery-hash compatibility.
+    snapshot.pop("language_variant", None)
     result["question_snapshot_sha256"] = sha256_text(compact_json(snapshot))
     return result
 
@@ -954,7 +968,7 @@ def write_final_question_to_source(
                 f"源 questions.jsonl 中 id={qid!r} 已在扫描/解题后变化；"
                 "拒绝覆盖，请重新 scan 并重做该题"
             )
-    validate_with_bank_contract(state, final_question)
+    validate_with_bank_contract(state, final_question, node_dir=str(row["node_dir"]))
     if matching:
         existing[matching[0]] = final_question
     else:
@@ -984,7 +998,7 @@ def accept_final(
         final_question = json.loads(row["question_json"])
         final_question["answer"] = answer
         final_question["explanation"] = solution
-        validate_with_bank_contract(state, final_question)
+        validate_with_bank_contract(state, final_question, node_dir=str(row["node_dir"]))
         final_path = state.bank / row["node_dir"] / "answer_final.jsonl"
         final_rows, final_errors = read_jsonl(final_path)
         if final_errors:
@@ -2395,6 +2409,7 @@ def public_question_snapshot(row: sqlite3.Row) -> dict[str, Any]:
     value = sanitized_question(row)
     value.pop("user_guidance", None)
     value.pop("solution_skills", None)
+    value.pop("language_variant", None)
     value.pop("question_snapshot_sha256", None)
     return value
 
@@ -3536,7 +3551,9 @@ class Pipeline:
                     final_question["answer"] = str(review.get("teacher_answer", ""))
                     final_question["explanation"] = str(review.get("teacher_solution", ""))
                     try:
-                        validate_with_bank_contract(self.state, final_question)
+                        validate_with_bank_contract(
+                            self.state, final_question, node_dir=str(row["node_dir"])
+                        )
                     except ManagerError as exc:
                         # Downgrade only this item when Teacher introduces a
                         # format violation; never abort its valid siblings.
@@ -3747,7 +3764,8 @@ class Pipeline:
                         - sum(
                             1
                             for row in rows
-                            if not row.get("difficulty") or not row.get("pool")
+                            if question_counts_toward_quota(row)
+                            and (not row.get("difficulty") or not row.get("pool"))
                         ),
                     )
                     for _, rows, deficits, _ in nodes
@@ -3822,6 +3840,7 @@ class Pipeline:
             request = {
                 "node_dir": node_rel,
                 "node_id": qfile.parent.name,
+                "language_variant": language_variant_for_node(node_rel),
                 "subject": str(existing[0].get("subject", qfile.parent.parent.name)) if existing else qfile.parent.parent.name,
                 "reference": reference[:30000],
                 "existing_questions": [
@@ -3829,6 +3848,7 @@ class Pipeline:
                         "id": q.get("id"),
                         "difficulty": q.get("difficulty", ""),
                         "pool": q.get("pool", ""),
+                        "quota_eligible": question_counts_toward_quota(q),
                         "prompt": q.get("prompt", ""),
                         "options": q.get("options", []),
                     }
@@ -3944,7 +3964,9 @@ class Pipeline:
                         )
                     else:
                         try:
-                            validate_with_bank_contract(self.state, question)
+                            validate_with_bank_contract(
+                                self.state, question, node_dir=node_rel
+                            )
                         except ManagerError as exc:
                             rejected.append((key, qid, question, candidate, str(exc)))
                         else:
@@ -4502,18 +4524,44 @@ def quota_deficits(
 ) -> dict[str, dict[str, int]]:
     quotas = configured_quotas(quotas)
     result: dict[str, dict[str, int]] = {}
+    eligible_rows = [row for row in rows if question_counts_toward_quota(row)]
     for difficulty in ("low", "mid", "high"):
         display = sum(
-            1 for q in rows if q.get("difficulty") == difficulty and q.get("pool") == "display"
+            1
+            for q in eligible_rows
+            if q.get("difficulty") == difficulty and q.get("pool") == "display"
         )
         exam = sum(
-            1 for q in rows if q.get("difficulty") == difficulty and q.get("pool") == "exam"
+            1
+            for q in eligible_rows
+            if q.get("difficulty") == difficulty and q.get("pool") == "exam"
         )
         result[difficulty] = {
             "display": max(0, quotas[difficulty]["display"] - display),
             "exam": max(0, quotas[difficulty]["exam"] - exam),
         }
     return result
+
+
+def question_counts_toward_quota(question: dict[str, Any]) -> bool:
+    """Only structurally deliverable single-choice rows satisfy a quota slot."""
+    options = question.get("options")
+    return bool(
+        str(question.get("prompt", "")).strip()
+        and question.get("answer") in {"A", "B", "C", "D"}
+        and isinstance(options, list)
+        and len(options) == 4
+        and [
+            str(option.get("id", ""))
+            for option in options
+            if isinstance(option, dict)
+        ]
+        == ["A", "B", "C", "D"]
+        and all(
+            isinstance(option, dict) and str(option.get("text", "")).strip()
+            for option in options
+        )
+    )
 
 
 def classified_rows_for_generation(
@@ -4687,7 +4735,12 @@ def validate_generated_question(item: dict[str, Any]) -> None:
         raise ManagerError("生成题试做过程为空")
 
 
-def validate_with_bank_contract(state: State, question: dict[str, Any]) -> None:
+def validate_with_bank_contract(
+    state: State,
+    question: dict[str, Any],
+    *,
+    node_dir: str | None = None,
+) -> None:
     """Apply a bank-provided per-question validator before source writeback."""
     validator_path = state.bank / "validate.py"
     if not validator_path.is_file():
@@ -4706,7 +4759,22 @@ def validate_with_bank_contract(state: State, question: dict[str, Any]) -> None:
         VALIDATOR_CACHE.clear()
         VALIDATOR_CACHE[cache_key] = check_question
     try:
-        violations = check_question(question, 1)
+        signature = inspect.signature(check_question)
+        accepts_locale = (
+            "locale" in signature.parameters
+            or any(
+                parameter.kind == inspect.Parameter.VAR_KEYWORD
+                for parameter in signature.parameters.values()
+            )
+        )
+        if accepts_locale:
+            violations = check_question(
+                question,
+                1,
+                locale=language_variant_for_node(node_dir or ""),
+            )
+        else:
+            violations = check_question(question, 1)
     except Exception as exc:
         raise ManagerError(f"题库 check_question 执行失败: {exc}") from exc
     if violations:

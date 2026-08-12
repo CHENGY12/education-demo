@@ -21,6 +21,8 @@
 - `解题技能库/<skill-id>/SKILL.md`：当前激活的共享 skill；只能由版本化写入器生成。
 - `错题集.jsonl`：由当前未解决记录原子重建的兼容导出。
 
+每题的净化请求还含由 `node_dir` 确定的 `language_variant`。`hk-*`/`hongkong` 节点为 `zh-Hant-HK`，所有自然语言字段使用香港繁体；其他当前大陆节点为 `zh-Hans-CN`。该字段进入请求 artifact 及其哈希，但不改变原业务 JSONL schema，也不改变用于交付兼容的题面内容哈希。
+
 ## 内部标识
 
 题目业务 id 可能在不同节点重复。内部 `question_key` 必须由“相对 questions.jsonl 路径 + NUL + 业务 id”的 SHA-256 派生；API 和数据库使用 `question_key`，写回节点时仍使用原业务 `id`。
@@ -37,6 +39,8 @@
 
 - 必需：`questions.jsonl`、`answer_review.jsonl`；
 - 可选：`question.png/jpg/jpeg`、`reference.md`。
+
+交付包根目录必须另含 `manifest.json`，逐个记录 `questions.jsonl` 的相对路径、题数、SHA-256 和字节数，并汇总节点数、题数、难度、池和答案分布。validator 会复算整份清单；包内不得出现 `._*`、`.DS_Store`、`__MACOSX/` 或名称含 ` copy` 的目录。
 
 不得包含 `answer_final.jsonl`、`answers1.jsonl`、`answers2.jsonl`、`answers3.jsonl`、`.qb-review` 或原始 Agent invocation。进入交付的每道题必须恰有一条 review，且 `teacher_verdict=pass`、`correct=true`、`answer_consistent=true`、`manager_status=final`、`auto_promote=true`，三名 solver 答案与 Teacher 相同、题面快照哈希相同、`questions.answer` 与 `teacher_answer` 相同、`questions.explanation` 与 Teacher 解法哈希相同。非 pass/final 题直接排除；标成 pass 却哈希或答案冲突时整批失败。
 

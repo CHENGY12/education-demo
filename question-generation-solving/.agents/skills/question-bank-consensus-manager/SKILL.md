@@ -26,6 +26,8 @@ The local runner enforces these boundaries. Do not replace it with three calls i
 
 Set `SKILL_ROOT` to this skill directory. Resolve `BANK_ROOT` to the directory whose descendants contain `questions.jsonl`. Never assume the current directory is the bank root when multiple candidates exist.
 
+Before any generation, audit, or delivery, read the bank's current `README.md` and `validate.py` completely, then read [delivery-issues-v1.md](references/delivery-issues-v1.md). The checklist is a required preflight reference distilled from prior delivery failures; do not rely on an older prompt's remembered rules.
+
 ```bash
 python3 "$SKILL_ROOT/scripts/qb_manager.py" doctor --bank "$BANK_ROOT"
 python3 "$SKILL_ROOT/scripts/qb_manager.py" init --bank "$BANK_ROOT"
@@ -75,6 +77,8 @@ Remove `--limit` after the sample passes. The command is resumable: completed qu
 
 Use `expand` when a node does not meet the low/mid/high and display/exam quotas described by the bank's own `README.md` or validator.
 
+The runner derives a language contract from each node path. Nodes under a cohort beginning `hk-` or containing `hongkong` are `zh-Hant-HK`: generated stems, options, hints, explanations, and learner-facing solver/Teacher prose must use Hong Kong Traditional Chinese. Current mainland cohorts are `zh-Hans-CN`. The language variant is placed in every sanitized request and included in its artifact hash; the validator independently rejects high-signal Simplified-only glyphs in Hong Kong nodes.
+
 ```bash
 python3 "$SKILL_ROOT/scripts/qb_manager.py" expand \
   --bank "$BANK_ROOT" \
@@ -104,6 +108,10 @@ python3 "$BANK_ROOT/validate.py" "/absolute/path/to/clean-delivery" --delivery
 ```
 
 The clean directory includes only Teacher-pass, manager-final questions whose current question snapshot, answer, three solver answers, and Teacher-solution hash agree. Per node it contains `questions.jsonl` and `answer_review.jsonl`; add `--include-source-assets` only when `reference.md` and the original question image should accompany delivery. It never copies `answer_final.jsonl`, `answers1/2/3.jsonl`, `.qb-review`, or invocation artifacts. Do not manually copy extra files into the package.
+
+The package root also contains a deterministic `manifest.json` covering every `questions.jsonl` path, byte size, SHA-256, question count, and aggregate difficulty/pool/answer counts. `--delivery` recomputes it and fails on drift. It also rejects AppleDouble files, `.DS_Store`, `__MACOSX`, and directory names containing ` copy`.
+
+Static validation and the generation-time 3+1 certificate are necessary but not sufficient for delivery. Before release, perform one answer-stripped blind re-solve that cannot see `answer`, `explanation`, the first-round candidates, or Teacher conclusions. This is a final delivery QA pass, not the removed automatic retry after a disagreement. If it exposes a generated-question defect, reject that generated candidate and let a later expansion create a different stem; do not send the wrong answer or concrete derivation to replacement generation.
 
 For subject groups with at least 40 questions, delivery defaults to an A/B/C/D share gate of 15%–35% per option. Override the bounds only when the receiver specifies another contract. Fix skew during generation by moving complete option texts and rerunning 3+1; never change only the answer letter.
 
@@ -191,6 +199,7 @@ python3 "$SKILL_ROOT/scripts/qb_manager.py" curate-skills \
 ## Prompt and data references
 
 - Read [manager-prompt.md](references/manager-prompt.md) when the user wants a reusable manager prompt.
+- Read [delivery-issues-v1.md](references/delivery-issues-v1.md) before every bank run; it is the embedded v1 delivery problem checklist supplied by the bank owner.
 - The runner loads [generator-solver-prompt.md](references/generator-solver-prompt.md), [solver-prompt.md](references/solver-prompt.md), and [teacher-prompt.md](references/teacher-prompt.md) directly. Modify these files only as a versioned prompt change; their hashes enter every run manifest.
 - Read [data-contract.md](references/data-contract.md) when integrating a new JSONL schema or external system.
 

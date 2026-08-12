@@ -465,6 +465,9 @@ class ManagerTests(unittest.TestCase):
         self.assertIn("UNIT_DIMENSION_MISMATCH", teacher)
         self.assertIn("--prepare-delivery", manager)
         self.assertIn("question_snapshot_sha256", manager)
+        for prompt in (generator, solver, teacher):
+            self.assertIn("zh-Hant-HK", prompt)
+        self.assertIn("delivery-issues-v1.md", manager)
 
     def test_safe_format_repair_adds_sentence_periods_idempotently(self) -> None:
         row = question("sentence-options")
@@ -1155,6 +1158,18 @@ class ManagerTests(unittest.TestCase):
         with self.assertRaisesRegex(qb.ManagerError, "缺少现有题分类"):
             qb.classified_rows_for_generation(rows, [])
 
+    def test_multiselect_seed_does_not_consume_single_choice_quota(self) -> None:
+        seed = question("multiselect-seed", "A、C")
+        seed["difficulty"] = ""
+        seed["pool"] = ""
+        classified = qb.classified_rows_for_generation(
+            [seed],
+            [{"id": seed["id"], "difficulty": "low", "pool": "display"}],
+        )
+        deficits = qb.quota_deficits(classified)
+        self.assertFalse(qb.question_counts_toward_quota(seed))
+        self.assertEqual(sum(sum(value.values()) for value in deficits.values()), 15)
+
     def test_generated_overflow_is_capped_without_discarding_needed_items(self) -> None:
         items = [
             {"difficulty": "high", "pool": "exam", "prompt": "needed"},
@@ -1260,6 +1275,41 @@ class ManagerTests(unittest.TestCase):
         self.assertEqual(set(snapshot["options"][0]), {"id", "text"})
         self.assertNotIn("answer", snapshot)
         self.assertNotIn("explanation", snapshot)
+
+    def test_hong_kong_node_adds_traditional_language_contract(self) -> None:
+        qb.scan_bank(self.state)
+        row = self.rows()[0]
+        with self.state.connect() as conn:
+            conn.execute(
+                "UPDATE questions SET node_dir=? WHERE question_key=?",
+                ("hk-hongkong-1-2026/数学/中五數學卷一_1", row["question_key"]),
+            )
+        snapshot = qb.sanitized_question(
+            qb.get_question_row(self.state, row["question_key"])
+        )
+        self.assertEqual(snapshot["language_variant"], "zh-Hant-HK")
+        self.assertEqual(
+            qb.language_variant_for_node("cn-shanghai-2-2026/物理/node-1"),
+            "zh-Hans-CN",
+        )
+
+    def test_bank_validator_receives_derived_hong_kong_locale(self) -> None:
+        qb.atomic_write_text(
+            self.bank / "validate.py",
+            "def check_question(question, line_no, *, locale=None):\n"
+            "    return [] if locale == 'zh-Hant-HK' else ['wrong-locale']\n",
+        )
+        qb.validate_with_bank_contract(
+            self.state,
+            question("hk-locale"),
+            node_dir="hk-hongkong-1-2026/数学/中五數學卷一_1",
+        )
+        with self.assertRaises(qb.ManagerError):
+            qb.validate_with_bank_contract(
+                self.state,
+                question("sh-locale"),
+                node_dir="cn-shanghai-2-2026/物理/node-1",
+            )
 
     def test_pagination_reaches_question_301(self) -> None:
         rows = [question(f"q-{index:03d}") for index in range(1, 302)]

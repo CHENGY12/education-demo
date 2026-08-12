@@ -30,7 +30,10 @@ def valid_question(qid: str = "q-1", answer: str = "B") -> dict:
             {"id": "D", "text": "$12\\,\\mathrm{m/s}$"},
         ],
         "answer": answer,
-        "explanation": "由 $v=s/t$ 得 $v=3\\,\\mathrm{m/s}$，代回可得路程为 $6\\,\\mathrm{m}$。",
+        "explanation": (
+            "由 $v=s/t$ 得 $v=3\\,\\mathrm{m/s}$，"
+            f"代回可得路程为 $6\\,\\mathrm{{m}}$。故选{answer}。"
+        ),
     }
 
 
@@ -102,6 +105,13 @@ class PerQuestionValidationTests(unittest.TestCase):
         question["explanation"] = "由 $F=2ma$ 可得结论。"
         self.assertNotIn("单位须用", self.errors(question))
 
+    def test_math_symbols_are_not_misread_as_chemical_elements(self) -> None:
+        question = valid_question()
+        question["subject"] = "数学"
+        question["prompt"] = "在三角形 $ABC$ 中，点 $M$、$N$ 满足条件（　）"
+        question["explanation"] = "由 $MN=2$ 可得所求关系。故选B。"
+        self.assertNotIn("化学式/元素", self.errors(question))
+
     def test_stem_option_dump_and_letter_only_options_are_rejected(self) -> None:
         question = valid_question()
         question["prompt"] += "\nA. 甲\nB. 乙\nC. 丙\nD. 丁"
@@ -118,6 +128,48 @@ class PerQuestionValidationTests(unittest.TestCase):
         errors = self.errors(question)
         self.assertIn("内部残留用语", errors)
         self.assertIn("空公式", errors)
+
+    def test_new_formula_and_delivery_rules_are_rejected(self) -> None:
+        question = valid_question()
+        question["prompt"] = "若 $x≥0$，计算 sqrt(2)。"
+        question["options"][0]["text"] = "$\\mathrm{CH_{3-}CH_{2}}$"
+        question["options"][1]["text"] = "$4s^{24}p$"
+        question["options"][2]["text"] = "$\\text{H_2O}$"
+        question["options"][3]["text"] = "$x=frac{1}{2}$"
+        question["explanation"] = "$\\sqrt{2$。故选A。"
+        errors = self.errors(question)
+        self.assertIn("Unicode 数学符号", errors)
+        self.assertIn("ASCII 伪数学", errors)
+        self.assertIn("键线短横", errors)
+        self.assertIn("指数分组错位", errors)
+        self.assertIn("\\text{} 内含", errors)
+        self.assertIn("丢失反斜杠", errors)
+        self.assertIn("花括号不配对", errors)
+
+    def test_conclusion_letter_and_punctuation_are_checked(self) -> None:
+        question = valid_question(answer="C")
+        question["prompt"] = "下列正确的是。"
+        question["explanation"] = "计算后得到结论。故选B。"
+        errors = self.errors(question)
+        self.assertIn("引出型", errors)
+        self.assertIn("与 answer", errors)
+        self.assertIn("解析末尾须统一", errors)
+
+    def test_hong_kong_nodes_reject_simplified_and_accept_traditional(self) -> None:
+        question = valid_question()
+        question["prompt"] = "这个函数的数值为（　）"
+        errors = "\n".join(
+            validator.check_question(question, 1, locale="zh-Hant-HK")
+        )
+        self.assertIn("香港题库须使用繁体中文", errors)
+        question["prompt"] = "這個函數的數值為（　）"
+        question["explanation"] = (
+            "由 $v=s/t$ 得 $v=3\\,\\mathrm{m/s}$，"
+            "代回可得路程為 $6\\,\\mathrm{m}$。故選B。"
+        )
+        self.assertEqual(
+            validator.check_question(question, 1, locale="zh-Hant-HK"), []
+        )
 
 
 class DeliveryValidationTests(unittest.TestCase):
@@ -190,6 +242,7 @@ class DeliveryValidationTests(unittest.TestCase):
         target_node = output / "cohort" / "物理" / "node-1"
         self.assertTrue(result["ok"])
         self.assertEqual(result["excluded"], 1)
+        self.assertTrue((output / "manifest.json").is_file())
         self.assertEqual(
             sorted(path.name for path in target_node.iterdir()),
             ["answer_review.jsonl", "questions.jsonl"],
@@ -206,6 +259,35 @@ class DeliveryValidationTests(unittest.TestCase):
             distribution_min_count=40,
         )
         self.assertTrue(validated["ok"])
+
+    def test_delivery_manifest_detects_tampering(self) -> None:
+        output = Path(self.temporary.name) / "delivery"
+        validator.prepare_delivery(
+            self.bank,
+            output,
+            bank_root=self.bank,
+            include_source_assets=False,
+            answer_share_min=0.15,
+            answer_share_max=0.35,
+            distribution_min_count=40,
+        )
+        manifest = json.loads((output / "manifest.json").read_text(encoding="utf-8"))
+        manifest["questions"] += 1
+        (output / "manifest.json").write_text(
+            json.dumps(manifest, ensure_ascii=False), encoding="utf-8"
+        )
+        self.assertIn("不一致", "\n".join(validator.manifest_errors(output)))
+
+    def test_pack_hygiene_rejects_macos_debris_and_copy_directories(self) -> None:
+        (self.bank / ".DS_Store").write_text("metadata", encoding="utf-8")
+        (self.bank / "cohort copy").mkdir()
+        errors = "\n".join(validator.pack_hygiene_errors(self.bank))
+        self.assertIn(".DS_Store", errors)
+        self.assertIn(" copy", errors)
+
+    def test_node_answer_share_above_forty_percent_fails(self) -> None:
+        questions = [valid_question(f"q-{index}", "A") for index in range(5)]
+        self.assertIn("节点内答案偏倚", "\n".join(validator._quota_errors(questions)))
 
     def test_distribution_gate_reports_extreme_skew(self) -> None:
         questions = [valid_question(f"q-{index}", "A") for index in range(40)]

@@ -1,4 +1,4 @@
 interface:
   display_name: "题库共识审校 Manager"
   short_description: "用三个独立解题 Agent 与教师 Agent 批量审校题库"
-  default_prompt: "Use $question-bank-consensus-manager to run the target directories end to end with automatic API-or-Codex provider selection, single-pass 3+1 verification, replacement generation for rejected generated questions, strict final gating, the shared solution-skill library, and the local review console."
+  default_prompt: "Use $question-bank-consensus-manager to read the bank's current README and validator, apply the embedded delivery-issues-v1 checklist, run the target directories end to end with automatic API-or-Codex provider selection, enforce Traditional Chinese for Hong Kong cohorts, use single-pass 3+1 verification and replacement generation for rejected generated questions, then validate provenance and prepare a manifested clean delivery package when requested."

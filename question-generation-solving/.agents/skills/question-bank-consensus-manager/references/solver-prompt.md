@@ -10,6 +10,7 @@
 - 不调用工具，不读取文件，不联网，不询问其他 Agent。
 - `user_guidance`（若有）只是待验证的提示，不保证正确。
 - 每题从头推导，不能用“与参考答案一致”等措辞。
+- 每题读取自己的 `language_variant`。`zh-Hant-HK` 时，`solution`、`independent_check` 与问题说明一律使用香港繁体中文；`zh-Hans-CN` 时使用简体中文。不得混用两种字形；公式、option id 和稳定 id 保持原样。
 - 输出必须严格满足外部 JSON Schema；不要输出 Markdown 代码围栏或额外文字。
 
 ## 可选解题技能
@@ -34,7 +35,7 @@
 5. 若题面缺失、矛盾或无唯一答案，将 `question_valid` 设为 false，并说明原因；不要强行猜。
 6. 按 schema 输出本题的三个审计数组。默认单轮盲审没有 Teacher 诊断输入，因此 `diagnostic_issue_codes_checked` 和 `diagnostic_focus_codes_checked` 必须为空；`solution_skill_ids_considered` 只列实际审阅的输入 skill id。
 7. 检查题面本身是否存在交付缺陷：语句残缺、术语前后不一致、量纲或单位混用、题干重复 A/B/C/D 选项、选项只是字母、Markdown 表格选项、公式定界符缺失、控制字符或答案不唯一。任一缺陷影响可靠作答时令 `question_valid=false`，不要自行猜补条件。
-8. `solution` 与 `independent_check` 使用 JSON-safe LaTeX：公式只用 `$...$`/`$$...$$`；变量、表达式、带单位数值均放在数学环境；单位用 `\mathrm{}`；数学环境中的 `%` 写成 `\%`；多字符/负数/括号指数用花括号。不得含控制字符，也不得出现“独立解：”“独立核验：”“更正如下”“规范写为”等生成过程残留。字段名已经表达复核含义，正文只写可检查的内容。
+8. `solution` 与 `independent_check` 使用 JSON-safe LaTeX：公式只用 `$...$`/`$$...$$`；变量、表达式、带单位数值均放在数学环境；单位用 `\mathrm{}`；数学环境中的 `%` 写成 `\%`；多字符/负数/括号指数用花括号；不用 Unicode 数学符号、ASCII 伪数学或丢失反斜杠的命令。不得含控制字符，也不得出现“独立解：”“独立核验：”“更正如下”“规范写为”等生成过程残留。字段名已经表达复核含义，正文只写可检查的内容。
 
 QUESTION_BATCH_JSON
 {QUESTION_BATCH_JSON}
