@@ -4111,7 +4111,13 @@ class Pipeline:
         quotas = configured_quotas(self.state.config().get("quotas"))
         files = resolve_scope(self.state.bank, scope)
         nodes: list[
-            tuple[Path, list[dict[str, Any]], dict[str, dict[str, int]], int]
+            tuple[
+                Path,
+                list[dict[str, Any]],
+                dict[str, dict[str, int]],
+                int,
+                set[str],
+            ]
         ] = []
         for qfile in files:
             rows, errors = read_jsonl(qfile)
@@ -4119,14 +4125,26 @@ class Pipeline:
                 continue
             if subject and rows and str(rows[0].get("subject", "")) != subject:
                 continue
-            deficits = quota_deficits(rows, quotas)
+            quota_eligible_ids = expansion_quota_eligible_ids(
+                self.state, qfile, rows
+            )
+            deficits = quota_deficits(
+                [
+                    row
+                    for row in rows
+                    if str(row.get("id", "")) in quota_eligible_ids
+                ],
+                quotas,
+            )
             safe_repairs = count_safe_format_repairs(rows)
             if (
                 sum(sum(pool.values()) for pool in deficits.values()) > 0
                 or any(not q.get("difficulty") or not q.get("pool") for q in rows)
                 or safe_repairs > 0
             ):
-                nodes.append((qfile, rows, deficits, safe_repairs))
+                nodes.append(
+                    (qfile, rows, deficits, safe_repairs, quota_eligible_ids)
+                )
         nodes.sort(key=lambda item: safe_rel(item[0], self.state.bank))
         if node_limit is not None:
             nodes = nodes[: max(0, node_limit)]
@@ -4141,15 +4159,16 @@ class Pipeline:
                         - sum(
                             1
                             for row in rows
-                            if question_counts_toward_quota(row)
+                            if str(row.get("id", "")) in quota_eligible_ids
+                            and question_counts_toward_quota(row)
                             and (not row.get("difficulty") or not row.get("pool"))
                         ),
                     )
-                    for _, rows, deficits, _ in nodes
+                    for _, rows, deficits, _, quota_eligible_ids in nodes
                 ),
                 "maximum": sum(
                     sum(sum(pool.values()) for pool in deficits.values())
-                    for _, _, deficits, _ in nodes
+                    for _, _, deficits, _, _ in nodes
                 ),
             },
             "unclassified_existing_questions": sum(
@@ -4158,9 +4177,11 @@ class Pipeline:
                     for row in rows
                     if not row.get("difficulty") or not row.get("pool")
                 )
-                for _, rows, _, _ in nodes
+                for _, rows, _, _, _ in nodes
             ),
-            "safe_format_repairs": sum(repairs for _, _, _, repairs in nodes),
+            "safe_format_repairs": sum(
+                repairs for _, _, _, repairs, _ in nodes
+            ),
             "quotas": quotas,
             "dry_run": dry_run,
         }
@@ -4182,7 +4203,13 @@ class Pipeline:
             "regeneration_needed": 0,
         }
         template = load_prompt("generator-solver-prompt.md")
-        for index, (qfile, existing, deficits, _) in enumerate(nodes, 1):
+        for index, (
+            qfile,
+            existing,
+            deficits,
+            _,
+            quota_eligible_ids,
+        ) in enumerate(nodes, 1):
             node_rel = safe_rel(qfile.parent, self.state.bank)
             node_dir = run_dir / f"node-{index:04d}-{sha256_text(node_rel)[:10]}"
             ref_path = qfile.parent / "reference.md"
@@ -4225,7 +4252,10 @@ class Pipeline:
                         "id": q.get("id"),
                         "difficulty": q.get("difficulty", ""),
                         "pool": q.get("pool", ""),
-                        "quota_eligible": question_counts_toward_quota(q),
+                        "quota_eligible": (
+                            str(q.get("id", "")) in quota_eligible_ids
+                            and question_counts_toward_quota(q)
+                        ),
                         "prompt": q.get("prompt", ""),
                         "options": q.get("options", []),
                     }
@@ -4280,7 +4310,14 @@ class Pipeline:
                 # before checking generated siblings so one malformed new item cannot
                 # strand all pre-existing questions in an unclassified state.
                 apply_classifications(self.state, qfile, classifications)
-                expected_counts = quota_deficits(classified_existing, quotas)
+                expected_counts = quota_deficits(
+                    [
+                        row
+                        for row in classified_existing
+                        if str(row.get("id", "")) in quota_eligible_ids
+                    ],
+                    quotas,
+                )
                 generated_items = [
                     item for item in payload.get("questions", []) if isinstance(item, dict)
                 ]
@@ -4939,6 +4976,43 @@ def question_counts_toward_quota(question: dict[str, Any]) -> bool:
             for option in options
         )
     )
+
+
+def expansion_quota_eligible_ids(
+    state: State,
+    question_file: Path,
+    rows: Sequence[dict[str, Any]],
+) -> set[str]:
+    """Return source ids that may satisfy a future delivery quota.
+
+    Pending/running rows still count during the initial expand-before-audit
+    pass.  Once a source seed is known to be disagreement/invalid/error it
+    remains in the working bank for audit, but no longer occupies a delivery
+    quota slot; a later expand can therefore generate a clean replacement.
+    """
+    qfile_rel = safe_rel(question_file, state.bank)
+    keys = {
+        question_key(qfile_rel, str(row.get("id", ""))): str(row.get("id", ""))
+        for row in rows
+        if str(row.get("id", ""))
+    }
+    if not keys:
+        return set()
+    placeholders = ",".join("?" for _ in keys)
+    with state.connect() as conn:
+        status_by_key = {
+            str(item["question_key"]): str(item["status"])
+            for item in conn.execute(
+                f"SELECT question_key,status FROM questions "
+                f"WHERE question_key IN ({placeholders})",
+                list(keys),
+            )
+        }
+    return {
+        qid
+        for key, qid in keys.items()
+        if status_by_key.get(key, "pending") not in UNRESOLVED_STATUSES
+    }
 
 
 def classified_rows_for_generation(

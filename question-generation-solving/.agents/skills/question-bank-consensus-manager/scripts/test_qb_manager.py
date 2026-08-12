@@ -1277,6 +1277,33 @@ class ManagerTests(unittest.TestCase):
         self.assertFalse(qb.question_counts_toward_quota(seed))
         self.assertEqual(sum(sum(value.values()) for value in deficits.values()), 15)
 
+    def test_unresolved_seed_no_longer_consumes_delivery_quota(self) -> None:
+        qb.atomic_write_jsonl(self.node / "questions.jsonl", [question("bad-seed")])
+        qb.scan_bank(self.state)
+        row = self.rows()[0]
+        qb.update_question_status(
+            self.state,
+            [row["question_key"]],
+            "disagreement",
+            "failed-seed-run",
+            verdict="solver disagreement",
+        )
+        eligible = qb.expansion_quota_eligible_ids(
+            self.state,
+            self.node / "questions.jsonl",
+            [question("bad-seed")],
+        )
+        self.assertEqual(eligible, set())
+        pipeline = qb.Pipeline(self.state, model=None, max_agent_processes=1)
+        preview = pipeline.expand(
+            scope="school/物理",
+            subject="物理",
+            node_limit=None,
+            auto_promote=True,
+            dry_run=True,
+        )
+        self.assertEqual(preview["new_questions_after_classification"]["maximum"], 15)
+
     def test_generated_overflow_is_capped_without_discarding_needed_items(self) -> None:
         items = [
             {"difficulty": "high", "pool": "exam", "prompt": "needed"},
