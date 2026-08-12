@@ -786,15 +786,17 @@ class ManagerTests(unittest.TestCase):
         counts = pipeline.audit_rows(self.rows(), run_id=initial_run, run_dir=initial_dir)
         pipeline.finish_manifest(initial_dir, counts)
 
+        pipeline.runner.max_processes = 2
         result = pipeline.blind_recheck(
             targets=["school/物理"],
             subject="物理",
-            batch_size=15,
+            batch_size=1,
             force=False,
             dry_run=False,
         )
         self.assertEqual(result["result"]["passed"], 2)
         self.assertEqual(result["result"]["error"], 0)
+        self.assertEqual(result["max_parallel_batches"], 2)
         with self.state.connect() as conn:
             certificates = list(conn.execute("SELECT * FROM blind_rechecks"))
         self.assertEqual(len(certificates), 2)

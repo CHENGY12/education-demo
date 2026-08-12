@@ -3942,13 +3942,9 @@ class Pipeline:
             rows[start : start + max(1, batch_size)]
             for start in range(0, len(rows), max(1, batch_size))
         ]
+        prepared_batches: list[dict[str, Any]] = []
         for index, batch in enumerate(batches, 1):
             label = f"batch-{index:04d}"
-            print(
-                f"[盲解 {index}/{len(batches)}] {batch[0]['node_dir']} 起 · "
-                f"{len(batch)} 题",
-                flush=True,
-            )
             questions: list[dict[str, Any]] = []
             image_paths: list[Path] = []
             seen_images: set[Path] = set()
@@ -3973,15 +3969,77 @@ class Pipeline:
                 {"QUESTION_BATCH_JSON": pretty_json({"questions": questions})},
             )
             invocation_dir = run_dir / label / "solver-blind-recheck"
+            prepared_batches.append(
+                {
+                    "index": index,
+                    "label": label,
+                    "batch": batch,
+                    "request": request,
+                    "prompt": prompt,
+                    "invocation_dir": invocation_dir,
+                    "image_paths": image_paths,
+                    "expected_hashes": expected_hashes,
+                }
+            )
+
+        max_parallel_batches = max(
+            1,
+            min(
+                len(prepared_batches),
+                int(getattr(self.runner, "max_processes", 1) or 1),
+            ),
+        )
+        preview["max_parallel_batches"] = max_parallel_batches
+
+        def invoke_blind_batch(
+            prepared: dict[str, Any],
+        ) -> tuple[dict[str, Any], dict[str, Any]]:
+            index = int(prepared["index"])
+            batch = prepared["batch"]
+            print(
+                f"[盲解 {index}/{len(prepared_batches)}] "
+                f"{batch[0]['node_dir']} 起 · {len(batch)} 题",
+                flush=True,
+            )
+            return self.runner.run(
+                role="solver-blind-recheck",
+                prompt=prepared["prompt"],
+                schema_path=SCRIPT_ROOT / "solver_batch.schema.json",
+                invocation_dir=prepared["invocation_dir"],
+                request=prepared["request"],
+                images=prepared["image_paths"],
+            )
+
+        invocation_results: dict[int, tuple[dict[str, Any], dict[str, Any]]] = {}
+        invocation_errors: dict[int, Exception] = {}
+        with concurrent.futures.ThreadPoolExecutor(
+            max_workers=max_parallel_batches,
+            thread_name_prefix="blind-recheck",
+        ) as executor:
+            future_to_batch = {
+                executor.submit(invoke_blind_batch, prepared): prepared
+                for prepared in prepared_batches
+            }
+            for future in concurrent.futures.as_completed(future_to_batch):
+                prepared = future_to_batch[future]
+                index = int(prepared["index"])
+                try:
+                    invocation_results[index] = future.result()
+                except Exception as exc:
+                    invocation_errors[index] = exc
+
+        # Apply model results in stable batch order.  Model calls run in
+        # parallel, while source-file writeback remains deterministic.
+        for prepared in prepared_batches:
+            index = int(prepared["index"])
+            label = str(prepared["label"])
+            batch = prepared["batch"]
+            invocation_dir = prepared["invocation_dir"]
+            expected_hashes = prepared["expected_hashes"]
             try:
-                payload, meta = self.runner.run(
-                    role="solver-blind-recheck",
-                    prompt=prompt,
-                    schema_path=SCRIPT_ROOT / "solver_batch.schema.json",
-                    invocation_dir=invocation_dir,
-                    request=request,
-                    images=image_paths,
-                )
+                if index in invocation_errors:
+                    raise invocation_errors[index]
+                payload, meta = invocation_results[index]
                 raw_solutions = payload.get("solutions", [])
                 if not isinstance(raw_solutions, list):
                     raise ManagerError("盲解响应 solutions 不是数组")
@@ -4004,7 +4062,9 @@ class Pipeline:
                     for item in raw_solutions
                     if isinstance(item, dict)
                 }
-                batch_results: list[dict[str, Any]] = []
+                evaluated: list[
+                    tuple[sqlite3.Row, dict[str, Any], str, bool]
+                ] = []
                 for original_row in batch:
                     key = str(original_row["question_key"])
                     current = get_question_row(self.state, key)
@@ -4032,6 +4092,11 @@ class Pipeline:
                         and expected_answer
                         and normalize_answer(solution.get("answer")) == expected_answer
                     )
+                    evaluated.append((current, solution, expected_hash, matched))
+
+                batch_results: list[dict[str, Any]] = []
+                for current, solution, expected_hash, matched in evaluated:
+                    key = str(current["question_key"])
                     store_blind_recheck(
                         self.state,
                         row=current,
@@ -4085,6 +4150,12 @@ class Pipeline:
                 atomic_write_json(
                     run_dir / label / "blind-recheck-results.json",
                     {"run_id": run_id, "results": batch_results},
+                )
+                print(
+                    f"  盲解 batch-{index:04d} 已落盘: "
+                    f"pass={sum(1 for item in batch_results if item['matched'])} "
+                    f"mismatch={sum(1 for item in batch_results if not item['matched'])}",
+                    flush=True,
                 )
             except Exception as exc:
                 result_counts["error"] += len(batch)
