@@ -81,6 +81,24 @@ function text(value, fallback = "") {
   return String(value);
 }
 
+const mathRenderOptions = Object.freeze({
+  delimiters: [
+    { left: "$$", right: "$$", display: true },
+    { left: "$", right: "$", display: false },
+    { left: "\\[", right: "\\]", display: true },
+    { left: "\\(", right: "\\)", display: false },
+  ],
+  throwOnError: false,
+  trust: false,
+  strict: "warn",
+  ignoredClasses: ["katex", "mono", "enum-code"],
+});
+
+function renderMath(root) {
+  if (!root || typeof window.renderMathInElement !== "function") return;
+  window.renderMathInElement(root, mathRenderOptions);
+}
+
 function asNumber(value, fallback = 0) {
   const number = Number(value);
   return Number.isFinite(number) ? number : fallback;
@@ -377,6 +395,7 @@ function renderList() {
     button.addEventListener("click", () => selectQuestion(index));
     root.append(button);
   });
+  renderMath(root);
 }
 
 async function loadQuestions({ keepSelection = true, resetOffset = false, edge = "first" } = {}) {
@@ -468,34 +487,11 @@ function renderDetail() {
     item.append(el("span", "option-id", String(option.id || "")), el("span", "", String(option.text || "")));
     options.append(item);
   });
-  const imageWrap = $("question-image-wrap");
-  const image = $("question-image");
-  const imageCaption = $("question-image-caption");
-  if (d.has_image) {
-    imageWrap.classList.remove("hidden");
-    const imageLabel = text(d.image_label, "题目图片");
-    const imageUrl = `/api/questions/${d.question_key}/image?v=${encodeURIComponent(d.updated_at || "")}`;
-    image.alt = imageLabel;
-    imageCaption.textContent = imageLabel;
-    image.onload = () => {
-      image.classList.remove("hidden");
-      imageCaption.textContent = imageLabel;
-    };
-    image.onerror = () => {
-      image.classList.add("hidden");
-      imageCaption.textContent = `${imageLabel}（加载失败，请确认通过本地服务地址打开网页）`;
-    };
-    image.classList.remove("hidden");
-    if (image.getAttribute("src") !== imageUrl) image.src = imageUrl;
-  } else {
-    imageWrap.classList.add("hidden");
-    image.removeAttribute("src");
-    imageCaption.textContent = "";
-  }
   renderAnnotations(d);
   renderJob(d.jobs || []);
   renderSolutions(d);
   renderRoundHistory(d);
+  renderMath($("detail"));
 }
 
 function renderJob(jobs) {
@@ -1074,6 +1070,7 @@ function renderSkillVerification(detail, version) {
   const details = el("details", "verification-raw");
   details.append(el("summary", "", "查看原始验证记录"), el("pre", "skill-content", displayValue(verification)));
   root.append(details);
+  renderMath(root);
 }
 
 function renderSkillVersionOptions(detail, selected) {

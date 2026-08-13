@@ -4,6 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>题库共识审校台</title>
+  <link rel="stylesheet" href="vendor/katex/katex.min.css">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -95,10 +96,6 @@
           <h2 id="question-prompt"></h2>
           <ol id="options" class="options"></ol>
           <p id="node-path" class="path"></p>
-          <figure id="question-image-wrap" class="question-image-wrap hidden">
-            <img id="question-image" alt="原题图片">
-            <figcaption id="question-image-caption"></figcaption>
-          </figure>
         </section>
 
         <section id="annotation-panel" class="annotation-panel panel hidden" aria-label="题目标注与暂存修订">
@@ -287,6 +284,8 @@
   </section>
 
   <div id="toasts" class="toasts" aria-live="assertive"></div>
+  <script src="vendor/katex/katex.min.js" defer></script>
+  <script src="vendor/katex/contrib/auto-render.min.js" defer></script>
   <script src="app.js" defer></script>
 </body>
 </html>

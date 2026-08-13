@@ -561,23 +561,9 @@ class ManagerTests(unittest.TestCase):
             qb.question_node_image(self.state, rows["pb_物理_node-1_seed_001"])
         )
         self.assertEqual(
-            qb.review_question_image(self.state, rows["pb_物理_node-1_seed_001"]),
-            self.node / "question.png",
-        )
-        self.assertEqual(
             qb.question_node_image(self.state, rows["pb_物理_node-1_original_001"]),
             self.node / "question.png",
         )
-        seed_detail = qb.question_detail(
-            self.state, rows["pb_物理_node-1_seed_001"]["question_key"]
-        )
-        self.assertTrue(seed_detail["has_image"])
-        self.assertEqual(seed_detail["image_kind"], "reference")
-        self.assertIn("仅供人工核验", seed_detail["image_label"])
-        original_detail = qb.question_detail(
-            self.state, rows["pb_物理_node-1_original_001"]["question_key"]
-        )
-        self.assertEqual(original_detail["image_kind"], "question")
 
         generated = question("pb_物理_node-1_custom_001")
         qfile_rel = qb.safe_rel(self.node / "questions.jsonl", self.bank)
@@ -594,13 +580,6 @@ class ManagerTests(unittest.TestCase):
         )
         self.assertIsNone(
             qb.question_node_image(self.state, qb.get_question_row(self.state, key))
-        )
-        generated_row = qb.get_question_row(self.state, key)
-        self.assertEqual(
-            qb.review_question_image(self.state, generated_row), self.node / "question.png"
-        )
-        self.assertEqual(
-            qb.question_detail(self.state, key)["image_kind"], "reference"
         )
 
     def test_scan_and_human_accept(self) -> None:
@@ -1413,11 +1392,18 @@ class ManagerTests(unittest.TestCase):
             with urllib.request.urlopen(base + "/app.js", timeout=5) as response:
                 script = response.read().decode("utf-8")
             self.assertIn("resolveAndMaybeNext", script)
+            for asset_path in (
+                "/vendor/katex/katex.min.css",
+                "/vendor/katex/katex.min.js",
+                "/vendor/katex/contrib/auto-render.min.js",
+                "/vendor/katex/fonts/KaTeX_Main-Regular.woff2",
+            ):
+                with urllib.request.urlopen(base + asset_path, timeout=5) as response:
+                    self.assertGreater(len(response.read()), 100)
             key = self.rows()[0]["question_key"]
             with urllib.request.urlopen(base + f"/api/questions/{key}", timeout=5) as response:
                 detail = json.loads(response.read().decode("utf-8"))
             self.assertTrue(detail["has_image"])
-            self.assertEqual(detail["image_kind"], "question")
             with urllib.request.urlopen(
                 base + f"/api/questions/{key}/image", timeout=5
             ) as response:
@@ -1674,8 +1660,23 @@ class ManagerTests(unittest.TestCase):
         self.assertIn('value="disagreement,invalid,error">待人工审查（默认）', html)
         self.assertIn('window.location.protocol === "file:"', app)
         self.assertIn('id="file-protocol-warning"', html)
-        self.assertIn('id="question-image-caption"', html)
-        self.assertIn("d.image_label", app)
+        self.assertNotIn('id="question-image"', html)
+        self.assertIn('vendor/katex/katex.min.css', html)
+        self.assertIn('vendor/katex/katex.min.js', html)
+        self.assertIn('vendor/katex/contrib/auto-render.min.js', html)
+        self.assertIn("function renderMath(root)", app)
+        self.assertIn('left: "$$", right: "$$", display: true', app)
+        self.assertIn('left: "$", right: "$", display: false', app)
+        vendor = qb.ASSET_ROOT / "vendor" / "katex"
+        expected_hashes = {
+            "katex.min.css": "180c2d77d434d7da51d6625c50a964d4fd6fdbdb9bc8796a0a016c30c49931fb",
+            "katex.min.js": "2ec5916941ef4383e0314eaabcc712301b06001d9fb68e08d751d2bae5a27a1a",
+            "contrib/auto-render.min.js": "e5372d199bcdae8b4de71d0f7ceba72a4ba12774a27c60a6f1f77d03b3228ee4",
+            "LICENSE": "766ccc1f306c885aa45542a9846bbd0a505b27a0374f146778171c2254ce18e3",
+        }
+        for relative, expected in expected_hashes.items():
+            self.assertEqual(qb.sha256_file(vendor / relative), expected)
+        self.assertGreaterEqual(len(list((vendor / "fonts").glob("*.woff2"))), 20)
 
     def test_solution_skill_versioning_dedup_and_user_guided_revision(self) -> None:
         event = qb.record_solution_skill(
