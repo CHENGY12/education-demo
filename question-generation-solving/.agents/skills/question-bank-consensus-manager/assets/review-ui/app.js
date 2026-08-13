@@ -469,10 +469,29 @@ function renderDetail() {
     options.append(item);
   });
   const imageWrap = $("question-image-wrap");
+  const image = $("question-image");
+  const imageCaption = $("question-image-caption");
   if (d.has_image) {
     imageWrap.classList.remove("hidden");
-    $("question-image").src = `/api/questions/${d.question_key}/image?${Date.now()}`;
-  } else imageWrap.classList.add("hidden");
+    const imageLabel = text(d.image_label, "题目图片");
+    const imageUrl = `/api/questions/${d.question_key}/image?v=${encodeURIComponent(d.updated_at || "")}`;
+    image.alt = imageLabel;
+    imageCaption.textContent = imageLabel;
+    image.onload = () => {
+      image.classList.remove("hidden");
+      imageCaption.textContent = imageLabel;
+    };
+    image.onerror = () => {
+      image.classList.add("hidden");
+      imageCaption.textContent = `${imageLabel}（加载失败，请确认通过本地服务地址打开网页）`;
+    };
+    image.classList.remove("hidden");
+    if (image.getAttribute("src") !== imageUrl) image.src = imageUrl;
+  } else {
+    imageWrap.classList.add("hidden");
+    image.removeAttribute("src");
+    imageCaption.textContent = "";
+  }
   renderAnnotations(d);
   renderJob(d.jobs || []);
   renderSolutions(d);
@@ -1296,6 +1315,10 @@ async function poll() {
 }
 
 (async function init() {
+  if (window.location.protocol === "file:") {
+    $("file-protocol-warning").classList.remove("hidden");
+    return;
+  }
   await loadSummary();
   await loadQuestions({ keepSelection: false });
   setInterval(poll, 2500);

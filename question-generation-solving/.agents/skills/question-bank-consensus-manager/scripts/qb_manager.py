@@ -1208,6 +1208,30 @@ def question_node_image(state: State, row: sqlite3.Row) -> Path | None:
     return node_question_image(state, str(row["node_dir"]))
 
 
+def review_question_image(state: State, row: sqlite3.Row) -> Path | None:
+    """Return the node image for human review, including variant references.
+
+    Seed and generated variants must not receive a node's source image as model
+    input because it may not match the variant verbatim.  Human reviewers still
+    need that image as provenance, so the review API exposes it with an explicit
+    reference label while ``question_node_image`` remains the solver gate.
+    """
+    return node_question_image(state, str(row["node_dir"]))
+
+
+def review_question_image_metadata(row: sqlite3.Row) -> tuple[str, str]:
+    is_reference = (
+        str(row["source_kind"]) == "generated"
+        or GENERATED_VARIANT_QID.search(str(row["qid"])) is not None
+    )
+    if is_reference:
+        return (
+            "reference",
+            "节点原题参考图（仅供人工核验，可能与当前变式不完全一致）",
+        )
+    return ("question", "当前题目原图")
+
+
 def update_question_status(
     state: State,
     keys: Sequence[str],
@@ -5669,7 +5693,8 @@ def question_detail(state: State, key: str) -> dict[str, Any]:
                 (key,),
             )
         )
-    image = question_node_image(state, row)
+    image = review_question_image(state, row)
+    image_kind, image_label = review_question_image_metadata(row)
     node = state.bank / row["node_dir"]
     final_rows, _ = read_jsonl(node / "answer_final.jsonl")
     final = next((item for item in final_rows if str(item.get("id", "")) == row["qid"]), None)
@@ -5754,6 +5779,8 @@ def question_detail(state: State, key: str) -> dict[str, Any]:
             for item in annotations
         ],
         "has_image": image is not None,
+        "image_kind": image_kind if image is not None else None,
+        "image_label": image_label if image is not None else None,
         "jobs": [dict(item) for item in jobs],
         "updated_at": row["updated_at"],
     }
@@ -7520,7 +7547,7 @@ class ReviewHandler(http.server.BaseHTTPRequestHandler):
             image_match = re.fullmatch(r"/api/questions/([0-9a-f]{64})/image", path)
             if image_match:
                 row = self.app.checked_row(image_match.group(1))
-                image_path = question_node_image(self.app.state, row)
+                image_path = review_question_image(self.app.state, row)
                 if not image_path:
                     self._error(404, "无题图")
                     return

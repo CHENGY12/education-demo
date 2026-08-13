@@ -4,9 +4,14 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>题库共识审校台</title>
-  <link rel="stylesheet" href="/styles.css">
+  <link rel="stylesheet" href="styles.css">
 </head>
 <body>
+  <section id="file-protocol-warning" class="file-protocol-warning hidden" role="alert">
+    <strong>这个审校台不能直接打开 HTML 文件。</strong>
+    <span>请先启动本地服务，再从服务地址进入，API 和题图才能加载。</span>
+    <a href="http://127.0.0.1:8765">打开 http://127.0.0.1:8765</a>
+  </section>
   <header class="topbar">
     <div class="brand">
       <span class="brand-mark">校</span>
@@ -92,6 +97,7 @@
           <p id="node-path" class="path"></p>
           <figure id="question-image-wrap" class="question-image-wrap hidden">
             <img id="question-image" alt="原题图片">
+            <figcaption id="question-image-caption"></figcaption>
           </figure>
         </section>
 
@@ -281,6 +287,6 @@
   </section>
 
   <div id="toasts" class="toasts" aria-live="assertive"></div>
-  <script src="/app.js" defer></script>
+  <script src="app.js" defer></script>
 </body>
 </html>

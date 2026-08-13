@@ -561,9 +561,23 @@ class ManagerTests(unittest.TestCase):
             qb.question_node_image(self.state, rows["pb_物理_node-1_seed_001"])
         )
         self.assertEqual(
+            qb.review_question_image(self.state, rows["pb_物理_node-1_seed_001"]),
+            self.node / "question.png",
+        )
+        self.assertEqual(
             qb.question_node_image(self.state, rows["pb_物理_node-1_original_001"]),
             self.node / "question.png",
         )
+        seed_detail = qb.question_detail(
+            self.state, rows["pb_物理_node-1_seed_001"]["question_key"]
+        )
+        self.assertTrue(seed_detail["has_image"])
+        self.assertEqual(seed_detail["image_kind"], "reference")
+        self.assertIn("仅供人工核验", seed_detail["image_label"])
+        original_detail = qb.question_detail(
+            self.state, rows["pb_物理_node-1_original_001"]["question_key"]
+        )
+        self.assertEqual(original_detail["image_kind"], "question")
 
         generated = question("pb_物理_node-1_custom_001")
         qfile_rel = qb.safe_rel(self.node / "questions.jsonl", self.bank)
@@ -580,6 +594,13 @@ class ManagerTests(unittest.TestCase):
         )
         self.assertIsNone(
             qb.question_node_image(self.state, qb.get_question_row(self.state, key))
+        )
+        generated_row = qb.get_question_row(self.state, key)
+        self.assertEqual(
+            qb.review_question_image(self.state, generated_row), self.node / "question.png"
+        )
+        self.assertEqual(
+            qb.question_detail(self.state, key)["image_kind"], "reference"
         )
 
     def test_scan_and_human_accept(self) -> None:
@@ -1371,6 +1392,7 @@ class ManagerTests(unittest.TestCase):
         self.assertEqual(len(source_rows), 14)
 
     def test_review_server_serves_ui_and_api(self) -> None:
+        qb.atomic_write_text(self.node / "question.png", "fixture-image")
         qb.scan_bank(self.state)
         app = qb.ReviewApplication(self.state, model=None, max_agent_processes=3)
         handler = type("TestReviewHandler", (qb.ReviewHandler,), {"app": app})
@@ -1391,6 +1413,16 @@ class ManagerTests(unittest.TestCase):
             with urllib.request.urlopen(base + "/app.js", timeout=5) as response:
                 script = response.read().decode("utf-8")
             self.assertIn("resolveAndMaybeNext", script)
+            key = self.rows()[0]["question_key"]
+            with urllib.request.urlopen(base + f"/api/questions/{key}", timeout=5) as response:
+                detail = json.loads(response.read().decode("utf-8"))
+            self.assertTrue(detail["has_image"])
+            self.assertEqual(detail["image_kind"], "question")
+            with urllib.request.urlopen(
+                base + f"/api/questions/{key}/image", timeout=5
+            ) as response:
+                self.assertEqual(response.headers.get_content_type(), "image/png")
+                self.assertEqual(response.read(), b"fixture-image")
         finally:
             server.shutdown()
             server.server_close()
@@ -1640,6 +1672,10 @@ class ManagerTests(unittest.TestCase):
         self.assertIn('seed: "disagreement,invalid,error"', app)
         self.assertIn('candidate: "disagreement"', app)
         self.assertIn('value="disagreement,invalid,error">待人工审查（默认）', html)
+        self.assertIn('window.location.protocol === "file:"', app)
+        self.assertIn('id="file-protocol-warning"', html)
+        self.assertIn('id="question-image-caption"', html)
+        self.assertIn("d.image_label", app)
 
     def test_solution_skill_versioning_dedup_and_user_guided_revision(self) -> None:
         event = qb.record_solution_skill(
