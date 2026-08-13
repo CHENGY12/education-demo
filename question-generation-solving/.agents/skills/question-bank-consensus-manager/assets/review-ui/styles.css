@@ -29,6 +29,15 @@ body {
   font-family: Inter, "PingFang SC", "Noto Sans CJK SC", "Microsoft YaHei", sans-serif;
 }
 
+.file-protocol-warning {
+  width: min(760px, calc(100% - 40px)); margin: 48px auto; padding: 24px;
+  display: grid; gap: 10px; border: 1px solid #d6c08f; border-radius: 16px;
+  color: #62491f; background: #fff6df; box-shadow: var(--shadow); line-height: 1.6;
+}
+.file-protocol-warning strong { font-size: 18px; }
+.file-protocol-warning a { width: fit-content; color: #0f6148; font-weight: 750; }
+.file-protocol-warning:not(.hidden) ~ * { display: none !important; }
+
 button, input, select, textarea { font: inherit; }
 button { cursor: pointer; }
 
@@ -158,8 +167,8 @@ button:disabled { cursor: not-allowed; opacity: .45; transform: none; }
 .option { display: grid; grid-template-columns: 30px 1fr; gap: 10px; align-items: start; padding: 11px 13px; border: 1px solid #e7e2d6; border-radius: 12px; background: #fbfaf5; line-height: 1.65; white-space: pre-wrap; }
 .option-id { width: 27px; height: 27px; display: grid; place-items: center; border-radius: 50%; color: var(--green); background: var(--green-soft); font-weight: 800; font-size: 12px; }
 .path { margin: 22px 0 0; color: var(--muted); font-size: 11px; word-break: break-all; }
-.question-image-wrap { margin: 24px 0 0; padding-top: 20px; border-top: 1px dashed var(--line); }
-.question-image { display: block; max-width: 100%; max-height: 600px; margin: auto; border-radius: 10px; }
+.katex-display { max-width: 100%; overflow-x: auto; overflow-y: hidden; padding: 2px 0; }
+.question-card .katex, .solution-text .katex, .item-prompt .katex { font-size: 1em; }
 
 .badge { display: inline-flex; min-height: 24px; align-items: center; padding: 0 9px; border-radius: 999px; color: var(--amber); background: var(--amber-soft); font-size: 11px; font-weight: 750; }
 .badge.neutral { color: var(--blue); background: var(--blue-soft); }

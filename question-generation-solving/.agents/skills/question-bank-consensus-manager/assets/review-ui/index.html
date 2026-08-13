@@ -4,9 +4,15 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>题库共识审校台</title>
-  <link rel="stylesheet" href="/styles.css">
+  <link rel="stylesheet" href="vendor/katex/katex.min.css">
+  <link rel="stylesheet" href="styles.css">
 </head>
 <body>
+  <section id="file-protocol-warning" class="file-protocol-warning hidden" role="alert">
+    <strong>这个审校台不能直接打开 HTML 文件。</strong>
+    <span>请先启动本地服务，再从服务地址进入，API 和题图才能加载。</span>
+    <a href="http://127.0.0.1:8765">打开 http://127.0.0.1:8765</a>
+  </section>
   <header class="topbar">
     <div class="brand">
       <span class="brand-mark">校</span>
@@ -37,7 +43,8 @@
           <label>
             <span>状态</span>
             <select id="status-filter">
-              <option value="disagreement">不一致（默认）</option>
+              <option value="disagreement,invalid,error">待人工审查（默认）</option>
+              <option value="disagreement">仅不一致</option>
               <option value="invalid">题目无效</option>
               <option value="error">运行错误</option>
               <option value="running">解题中</option>
@@ -89,9 +96,6 @@
           <h2 id="question-prompt"></h2>
           <ol id="options" class="options"></ol>
           <p id="node-path" class="path"></p>
-          <figure id="question-image-wrap" class="question-image-wrap hidden">
-            <img id="question-image" alt="原题图片">
-          </figure>
         </section>
 
         <section id="annotation-panel" class="annotation-panel panel hidden" aria-label="题目标注与暂存修订">
@@ -131,11 +135,11 @@
           <summary>
             <span>
               <span class="eyebrow">AUDIT HISTORY</span>
-              <strong>查看首轮、兜底轮与历史解题记录</strong>
+              <strong>查看首轮、人工重解与历史记录</strong>
             </span>
             <span id="rounds-count" class="mono"></span>
           </summary>
-          <p class="rounds-note">当前轮仍在上方完整展示；这里按轮汇总全部三个独立 Solver、Teacher 与 enum-only retry diagnostics，当前轮会重复列出以便对照。</p>
+          <p class="rounds-note">当前轮仍在上方完整展示；这里按轮汇总三个独立 Solver、Teacher 与路由诊断。新流程不会因首轮不一致自动再跑 3+1；历史兜底轮仅用于兼容旧审计记录。</p>
           <div id="rounds-list" class="rounds-list"></div>
         </details>
 
@@ -280,6 +284,8 @@
   </section>
 
   <div id="toasts" class="toasts" aria-live="assertive"></div>
-  <script src="/app.js" defer></script>
+  <script src="vendor/katex/katex.min.js" defer></script>
+  <script src="vendor/katex/contrib/auto-render.min.js" defer></script>
+  <script src="app.js" defer></script>
 </body>
 </html>

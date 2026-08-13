@@ -17,6 +17,7 @@ import datetime as dt
 import fnmatch
 import hashlib
 import http.server
+import inspect
 import json
 import mimetypes
 import os
@@ -49,17 +50,42 @@ REFERENCE_ROOT = SKILL_ROOT / "references"
 SCRIPT_ROOT = SKILL_ROOT / "scripts"
 STATE_DIRNAME = ".qb-review"
 SOLUTION_SKILLS_DIRNAME = "解题技能库"
-SCHEMA_VERSION = "2"
+REVIEW_QUEUE_DIRNAME = "review-queue"
+REVIEW_QUEUE_FILENAME = "unresolved.jsonl"
+REVIEW_QUEUE_SCHEMA_VERSION = 1
+SCHEMA_VERSION = "3"
 STATUSES = ("pending", "running", "final", "disagreement", "invalid", "error")
 UNRESOLVED_STATUSES = ("disagreement", "invalid", "error")
 FILE_LOCK = threading.RLock()
-VALIDATOR_CACHE: dict[str, Callable[[dict[str, Any], int], list[str]]] = {}
+VALIDATOR_CACHE: dict[str, Callable[..., list[str]]] = {}
 
 SOLVER_LENSES = {
     "solver1": "从第一性原理建立模型，完整推导后用代回或守恒关系复核。",
     "solver2": "尽量采用与常规首解不同的路线，重点检查条件、符号、单位与选项唯一性。",
     "solver3": "以反例审查者视角做题，主动寻找陷阱，并用边界、量纲或极端情形复核。",
 }
+
+# One shared transport contract keeps request construction and forensic
+# verification aligned.  ``language_variant`` is routing metadata (for example
+# Hong Kong Traditional Chinese), so it is allowed in solver requests even
+# though it is deliberately excluded from the content snapshot hash.
+SOLVER_QUESTION_FIELDS = frozenset(
+    {
+        "id",
+        "display_id",
+        "subject",
+        "prompt",
+        "options",
+        "difficulty",
+        "question_type",
+        "language_variant",
+        "user_guidance",
+        "image_attachment",
+        "question_snapshot_sha256",
+        "solution_skills",
+        "verification_feedback",
+    }
+)
 
 DEFAULT_QUOTAS = {
     "low": {"display": 3, "exam": 2},
@@ -83,42 +109,6 @@ DISABLED_AGENT_FEATURES = (
     "tool_suggest",
     "workspace_dependencies",
 )
-
-RETRY_ISSUE_LABELS = {
-    "misread_condition": "重新核对题干条件及所求量，首轮存在读题偏差",
-    "wrong_model": "重新从基本规律建模，首轮所用模型可能不适用",
-    "invalid_assumption": "逐项验证隐含假设及定律适用条件",
-    "algebra_error": "独立重做代数变形并逐步复核",
-    "arithmetic_error": "独立重算数值步骤并做代回检查",
-    "sign_direction_error": "重新约定正方向并检查符号与方向",
-    "unit_dimension_error": "逐式检查单位和量纲",
-    "boundary_check_failed": "使用边界、极端或特殊情形复核",
-    "option_uniqueness_error": "逐项验证选项并检查唯一性",
-    "unsupported_conclusion": "补齐从条件到结论的证据链",
-    "contradictory_reasoning": "定位并消除推理链内部矛盾",
-    "incomplete_reasoning": "补足决定最终结论的关键步骤",
-    "image_interpretation_error": "重新独立读取题图条件，不沿用首轮解释",
-    "question_ambiguous": "先判断题意是否存在多种合理解释",
-    "question_incomplete": "先检查题面是否缺少完成求解所需条件",
-    "no_unique_answer": "先检查题目是否确有唯一答案",
-    "answer_process_mismatch": "检查最终结论是否由前述过程真实推出",
-}
-
-RETRY_FOCUS_LABELS = {
-    "reread_conditions": "重新列出全部已知、未知和限制条件",
-    "rebuild_model": "从第一性原理重新建立模型",
-    "derive_independently": "不要修补旧解，完整独立推导",
-    "verify_applicability": "核验每条公式或定律的适用条件",
-    "check_algebra": "逐行检查代数与数值计算",
-    "check_units": "用单位和量纲复核",
-    "check_signs": "用统一正方向检查符号",
-    "test_boundary_cases": "用边界或极端情形复核",
-    "verify_each_option": "逐项代入或排除并确认唯一性",
-    "cross_check_second_method": "至少使用一种独立方法交叉核验",
-    "inspect_image_only": "独立读取题图中的条件",
-    "assess_question_validity": "先判断题面完整、无矛盾且答案唯一",
-}
-
 
 class ManagerError(RuntimeError):
     pass
@@ -237,6 +227,14 @@ def question_key(question_file_rel: str, qid: str) -> str:
     return sha256_text(f"{question_file_rel}\0{qid}")
 
 
+def is_seed_question_id(qid: str) -> bool:
+    return "_seed_" in str(qid).lower()
+
+
+def portable_review_queue_path(state: "State") -> Path:
+    return state.bank / REVIEW_QUEUE_DIRNAME / REVIEW_QUEUE_FILENAME
+
+
 def safe_component(value: str, max_len: int = 48) -> str:
     slug = re.sub(r"[^0-9A-Za-z._-]+", "-", value).strip("-.")
     if not slug:
@@ -301,6 +299,7 @@ class State:
         self.solution_skills_root = self.bank / SOLUTION_SKILLS_DIRNAME
         self.skill_events_path = self.root / "solution-skill-events.jsonl"
         self.skill_versions_root = self.root / "solution-skill-versions"
+        self.blind_rechecks_path = self.root / "blind-rechecks.jsonl"
 
     def ensure(self) -> None:
         self.root.mkdir(parents=True, exist_ok=True)
@@ -330,7 +329,6 @@ class State:
                         "teacher_disagreement": "max",
                         "skill": "xhigh"
                     },
-                    "post_verify_retry": True,
                     "solution_skills": {
                         "enabled": True,
                         "max_context_skills": 5,
@@ -434,6 +432,25 @@ class State:
                     FOREIGN KEY(question_key) REFERENCES questions(question_key)
                 );
                 CREATE INDEX IF NOT EXISTS idx_reviews_question ON reviews(question_key, created_at);
+                CREATE TABLE IF NOT EXISTS blind_rechecks (
+                    question_key TEXT NOT NULL,
+                    run_id TEXT NOT NULL,
+                    answer TEXT NOT NULL,
+                    solution TEXT NOT NULL,
+                    independent_check TEXT NOT NULL,
+                    question_valid INTEGER NOT NULL,
+                    matched INTEGER NOT NULL,
+                    question_snapshot_sha256 TEXT NOT NULL,
+                    final_content_sha256 TEXT NOT NULL,
+                    invocation_dir TEXT NOT NULL,
+                    prompt_sha256 TEXT NOT NULL,
+                    response_sha256 TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    PRIMARY KEY(question_key, run_id),
+                    FOREIGN KEY(question_key) REFERENCES questions(question_key)
+                );
+                CREATE INDEX IF NOT EXISTS idx_blind_rechecks_question
+                    ON blind_rechecks(question_key, created_at);
                 CREATE TABLE IF NOT EXISTS jobs (
                     job_id TEXT PRIMARY KEY,
                     question_key TEXT NOT NULL,
@@ -775,6 +792,284 @@ def import_legacy_node(state: State, qfile: Path, keys_by_id: dict[str, str]) ->
     return imported
 
 
+def import_portable_review_queue(
+    state: State,
+    question_files: Sequence[Path],
+    *,
+    subject: str | None = None,
+) -> dict[str, Any]:
+    """Restore unresolved review evidence that is intentionally kept out of delivery.
+
+    ``.qb-review`` is local runtime state and is not shipped in a clean Git clone.
+    The portable queue keeps unresolved seed questions reviewable without putting
+    invalid or disputed questions back into authoritative ``questions.jsonl``.
+    Generated failures use the same evidence format, but remain replacement
+    candidates rather than source questions.
+    """
+    queue_path = portable_review_queue_path(state)
+    records, errors = read_jsonl(queue_path)
+    report: dict[str, Any] = {
+        "path": safe_rel(queue_path, state.bank),
+        "records_seen": len(records),
+        "questions_imported": 0,
+        "attempts_imported": 0,
+        "reviews_imported": 0,
+        "annotations_imported": 0,
+        "resolved_records_skipped": 0,
+        "errors": list(errors),
+    }
+    if not records:
+        return report
+
+    allowed_files = {safe_rel(path, state.bank): path for path in question_files}
+    source_by_file: dict[str, dict[str, dict[str, Any]]] = {}
+    for question_file_rel, question_file in allowed_files.items():
+        source_rows, source_errors = read_jsonl(question_file)
+        report["errors"].extend(source_errors)
+        indexed: dict[str, dict[str, Any]] = {}
+        for source_row in source_rows:
+            source_id = str(source_row.get("id", "")).strip()
+            if source_id and source_id not in indexed:
+                indexed[source_id] = source_row
+        source_by_file[question_file_rel] = indexed
+
+    seen_keys: set[str] = set()
+    with state.connect() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        for line_no, record in enumerate(records, 1):
+            prefix = f"{queue_path}:{line_no}"
+            status = str(record.get("status", ""))
+            if status not in UNRESOLVED_STATUSES:
+                report["errors"].append(
+                    f"{prefix}: status 必须是 {','.join(UNRESOLVED_STATUSES)}"
+                )
+                continue
+            qid = str(record.get("id", "")).strip()
+            raw_node_dir = str(record.get("node_dir", "")).strip().replace("\\", "/")
+            question = record.get("question")
+            if not qid or not raw_node_dir or not isinstance(question, dict):
+                report["errors"].append(f"{prefix}: 缺少 id/node_dir/question")
+                continue
+            if str(question.get("id", "")).strip() != qid:
+                report["errors"].append(f"{prefix}: question.id 与记录 id 不一致")
+                continue
+            if Path(raw_node_dir).is_absolute():
+                report["errors"].append(f"{prefix}: node_dir 不得是绝对路径")
+                continue
+            try:
+                canonical_node_dir = safe_rel(state.bank / raw_node_dir, state.bank)
+            except ManagerError as exc:
+                report["errors"].append(f"{prefix}: {exc}")
+                continue
+            if canonical_node_dir != raw_node_dir.strip("/"):
+                report["errors"].append(f"{prefix}: node_dir 含非规范路径片段")
+                continue
+            question_file_rel = f"{canonical_node_dir}/questions.jsonl"
+            declared_question_file = str(record.get("question_file", "")).strip()
+            if declared_question_file and declared_question_file != question_file_rel:
+                report["errors"].append(f"{prefix}: question_file 与 node_dir 不一致")
+                continue
+            if question_file_rel not in allowed_files:
+                continue
+            item_subject = str(
+                record.get("subject") or question.get("subject") or ""
+            ).strip()
+            if subject and item_subject != subject:
+                continue
+            key = question_key(question_file_rel, qid)
+            if str(record.get("question_key", "")) != key:
+                report["errors"].append(f"{prefix}: question_key 与路径/id 哈希不一致")
+                continue
+            if key in seen_keys:
+                report["errors"].append(f"{prefix}: review queue 重复 question_key")
+                continue
+            seen_keys.add(key)
+
+            current = conn.execute(
+                "SELECT * FROM questions WHERE question_key=?", (key,)
+            ).fetchone()
+            if current is not None and str(current["status"]) == "final":
+                report["resolved_records_skipped"] += 1
+                continue
+            source_question = source_by_file.get(question_file_rel, {}).get(qid)
+            if (
+                source_question is not None
+                and compact_json(source_question) != compact_json(question)
+            ):
+                report["errors"].append(
+                    f"{prefix}: portable 题面与当前 questions.jsonl 不一致，已跳过旧记录"
+                )
+                continue
+            canonical_question = source_question or question
+            if source_question is not None:
+                source_kind = str(current["source_kind"]) if current is not None else "existing"
+            else:
+                source_kind = "seed_review" if is_seed_question_id(qid) else "generated"
+            attempts = record.get("attempts")
+            attempt_rows = attempts if isinstance(attempts, list) else []
+            teacher_review = record.get("teacher_review")
+            review = teacher_review if isinstance(teacher_review, dict) else None
+            run_id = str((review or {}).get("run_id", "")).strip()
+            if not run_id:
+                run_id = next(
+                    (
+                        str(item.get("run_id", "")).strip()
+                        for item in attempt_rows
+                        if isinstance(item, dict) and str(item.get("run_id", "")).strip()
+                    ),
+                    f"portable-{key[:16]}",
+                )
+            updated_at = str(record.get("updated_at") or utc_now())
+            teacher_answer = str((review or {}).get("teacher_answer", ""))
+            teacher_solution = str((review or {}).get("teacher_solution", ""))
+            teacher_verdict = str((review or {}).get("verdict") or status)
+
+            if current is None:
+                conn.execute(
+                    """
+                    INSERT INTO questions(
+                        question_key,qid,node_dir,question_file,subject,question_json,
+                        source_kind,status,current_run_id,teacher_answer,teacher_solution,
+                        teacher_verdict,updated_at
+                    ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)
+                    """,
+                    (
+                        key,
+                        qid,
+                        canonical_node_dir,
+                        question_file_rel,
+                        item_subject,
+                        compact_json(canonical_question),
+                        source_kind,
+                        status,
+                        run_id,
+                        teacher_answer,
+                        teacher_solution,
+                        teacher_verdict,
+                        updated_at,
+                    ),
+                )
+            else:
+                conn.execute(
+                    """
+                    UPDATE questions SET qid=?,node_dir=?,question_file=?,subject=?,
+                        question_json=?,source_kind=?,status=?,current_run_id=?,
+                        teacher_answer=?,teacher_solution=?,teacher_verdict=?,updated_at=?
+                    WHERE question_key=? AND status!='final'
+                    """,
+                    (
+                        qid,
+                        canonical_node_dir,
+                        question_file_rel,
+                        item_subject,
+                        compact_json(canonical_question),
+                        source_kind,
+                        status,
+                        run_id,
+                        teacher_answer,
+                        teacher_solution,
+                        teacher_verdict,
+                        updated_at,
+                        key,
+                    ),
+                )
+            report["questions_imported"] += 1
+
+            for attempt in attempt_rows:
+                if not isinstance(attempt, dict):
+                    report["errors"].append(f"{prefix}: attempt 必须是 object")
+                    continue
+                attempt_run_id = str(attempt.get("run_id") or run_id).strip()
+                agent_id = str(attempt.get("agent_id", "")).strip()
+                if not attempt_run_id or not agent_id:
+                    report["errors"].append(f"{prefix}: attempt 缺 run_id/agent_id")
+                    continue
+                raw_attempt = compact_json(attempt)
+                cursor = conn.execute(
+                    """
+                    INSERT OR IGNORE INTO attempts(
+                        question_key,run_id,agent_id,answer,solution,independent_check,
+                        question_valid,confidence,raw_json,invocation_dir,prompt_sha256,
+                        response_sha256,created_at
+                    ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)
+                    """,
+                    (
+                        key,
+                        attempt_run_id,
+                        agent_id,
+                        str(attempt.get("answer", "")),
+                        str(attempt.get("solution", "")),
+                        str(attempt.get("independent_check", "")),
+                        int(bool(attempt.get("question_valid"))),
+                        str(attempt.get("confidence", "")),
+                        raw_attempt,
+                        safe_rel(queue_path, state.bank),
+                        "portable-review-queue",
+                        sha256_text(raw_attempt),
+                        str(attempt.get("created_at") or updated_at),
+                    ),
+                )
+                report["attempts_imported"] += int(cursor.rowcount == 1)
+
+            if review is not None:
+                raw_review = compact_json(review)
+                cursor = conn.execute(
+                    """
+                    INSERT OR IGNORE INTO reviews(
+                        question_key,run_id,verdict,answer_consistent,teacher_answer,
+                        teacher_solution,process_review,agent_feedback_json,auto_promote,
+                        raw_json,invocation_dir,prompt_sha256,response_sha256,created_at
+                    ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                    """,
+                    (
+                        key,
+                        run_id,
+                        str(review.get("verdict") or status),
+                        int(bool(review.get("answer_consistent"))),
+                        str(review.get("teacher_answer", "")),
+                        str(review.get("teacher_solution", "")),
+                        str(review.get("process_review", "")),
+                        compact_json(review.get("agent_feedback") or []),
+                        int(bool(review.get("auto_promote"))),
+                        raw_review,
+                        safe_rel(queue_path, state.bank),
+                        "portable-review-queue",
+                        sha256_text(raw_review),
+                        str(review.get("created_at") or updated_at),
+                    ),
+                )
+                report["reviews_imported"] += int(cursor.rowcount == 1)
+                annotation = review.get("question_annotation")
+                if isinstance(annotation, dict):
+                    annotation_id = sha256_text(
+                        f"portable-review-queue\0{key}\0{run_id}"
+                    )
+                    validity = str(annotation.get("validity") or "unreviewed")
+                    if validity not in {"valid", "invalid", "uncertain", "unreviewed"}:
+                        validity = "unreviewed"
+                    cursor = conn.execute(
+                        """
+                        INSERT OR IGNORE INTO question_annotations(
+                            annotation_id,question_key,run_id,status,issue_codes_json,
+                            summary,proposed_revision_json,created_at
+                        ) VALUES(?,?,?,?,?,?,?,?)
+                        """,
+                        (
+                            annotation_id,
+                            key,
+                            run_id,
+                            validity,
+                            compact_json(annotation.get("annotation_codes") or []),
+                            str(annotation.get("summary", "")),
+                            compact_json(annotation.get("proposed_revision")),
+                            str(review.get("created_at") or updated_at),
+                        ),
+                    )
+                    report["annotations_imported"] += int(cursor.rowcount == 1)
+        conn.execute("COMMIT")
+    return report
+
+
 def scan_bank(state: State, scope: ScopeValue = None, subject: str | None = None) -> dict[str, Any]:
     state.ensure()
     files = resolve_scope(state.bank, scope)
@@ -813,6 +1108,8 @@ def scan_bank(state: State, scope: ScopeValue = None, subject: str | None = None
             nodes += 1
             questions += accepted_rows
             legacy += import_legacy_node(state, qfile, keys_by_id)
+    portable_queue = import_portable_review_queue(state, files, subject=subject)
+    errors.extend(portable_queue["errors"])
     with state.connect() as conn:
         by_status = {row["status"]: row["n"] for row in conn.execute(
             "SELECT status,COUNT(*) AS n FROM questions GROUP BY status"
@@ -822,6 +1119,9 @@ def scan_bank(state: State, scope: ScopeValue = None, subject: str | None = None
         "nodes": nodes,
         "questions": questions,
         "legacy_attempts_seen": legacy,
+        "portable_review_queue": {
+            key: value for key, value in portable_queue.items() if key != "errors"
+        },
         "errors": errors,
         "status": by_status,
     }
@@ -835,11 +1135,19 @@ def get_question_row(state: State, key: str) -> sqlite3.Row:
     return row
 
 
+def language_variant_for_node(node_dir: str) -> str:
+    """Derive the required natural-language variant from the cohort path."""
+    normalized = str(node_dir).replace("\\", "/").lower()
+    parts = [part for part in normalized.split("/") if part]
+    if any(part.startswith("hk-") or "hongkong" in part for part in parts):
+        return "zh-Hant-HK"
+    return "zh-Hans-CN"
+
+
 def sanitized_question(
     row: sqlite3.Row,
     guidance: str = "",
     *,
-    retry_feedback: dict[str, Any] | None = None,
     solution_skills: Sequence[dict[str, Any]] = (),
 ) -> dict[str, Any]:
     question = json.loads(row["question_json"])
@@ -857,41 +1165,18 @@ def sanitized_question(
         "options": options,
         "difficulty": question.get("difficulty", ""),
         "question_type": "multiple_choice" if options else "open_response",
+        "language_variant": language_variant_for_node(str(row["node_dir"])),
         "user_guidance": guidance,
         "solution_skills": list(solution_skills),
     }
     snapshot = dict(result)
     snapshot.pop("user_guidance", None)
     snapshot.pop("solution_skills", None)
+    # The locale is deterministic transport metadata, not part of the public
+    # question JSONL snapshot used by delivery-hash compatibility.
+    snapshot.pop("language_variant", None)
     result["question_snapshot_sha256"] = sha256_text(compact_json(snapshot))
-    if retry_feedback:
-        result["verification_feedback"] = retry_feedback
     return result
-
-
-def render_retry_feedback(review: dict[str, Any]) -> dict[str, Any] | None:
-    """Render a code-only Teacher diagnosis without carrying any prior answer."""
-    raw = review.get("retry_feedback")
-    if not isinstance(raw, dict) or str(raw.get("disposition")) != "retry":
-        return None
-    requested_issues = {str(code) for code in raw.get("issue_codes", [])}
-    requested_focus = {str(code) for code in raw.get("focus_codes", [])}
-    # Canonical manager order prevents the Teacher from using list ordering as
-    # a covert low-bandwidth hint about an answer or a preferred derivation.
-    issue_codes = [code for code in RETRY_ISSUE_LABELS if code in requested_issues]
-    focus_codes = [code for code in RETRY_FOCUS_LABELS if code in requested_focus]
-    if not issue_codes or not focus_codes:
-        return None
-    payload = {
-        "round": 2,
-        "issue_codes": issue_codes,
-        "focus_codes": focus_codes,
-        "observed_problems": [RETRY_ISSUE_LABELS[code] for code in issue_codes],
-        "required_checks": [RETRY_FOCUS_LABELS[code] for code in focus_codes],
-        "safety_note": "只描述首轮错误类型与复核重点；不包含首轮答案、Teacher 答案或具体解法。",
-    }
-    payload["feedback_sha256"] = sha256_text(compact_json(payload))
-    return payload
 
 
 def node_question_image(state: State, node_dir: str) -> Path | None:
@@ -1010,7 +1295,8 @@ def write_final_question_to_source(
     matching = [index for index, item in enumerate(existing) if str(item.get("id", "")) == qid]
     if len(matching) > 1:
         raise ManagerError(f"源 questions.jsonl 中 id={qid!r} 出现多次，拒绝写回")
-    if not matching and row["source_kind"] != "generated":
+    appendable_source_kinds = {"generated", "seed_review"}
+    if not matching and str(row["source_kind"]) not in appendable_source_kinds:
         raise ManagerError(f"源 questions.jsonl 中找不到现有题 id={qid!r}，拒绝写回")
     if matching:
         indexed_question = json.loads(row["question_json"])
@@ -1019,7 +1305,7 @@ def write_final_question_to_source(
                 f"源 questions.jsonl 中 id={qid!r} 已在扫描/解题后变化；"
                 "拒绝覆盖，请重新 scan 并重做该题"
             )
-    validate_with_bank_contract(state, final_question)
+    validate_with_bank_contract(state, final_question, node_dir=str(row["node_dir"]))
     if matching:
         existing[matching[0]] = final_question
     else:
@@ -1049,7 +1335,7 @@ def accept_final(
         final_question = json.loads(row["question_json"])
         final_question["answer"] = answer
         final_question["explanation"] = solution
-        validate_with_bank_contract(state, final_question)
+        validate_with_bank_contract(state, final_question, node_dir=str(row["node_dir"]))
         final_path = state.bank / row["node_dir"] / "answer_final.jsonl"
         final_rows, final_errors = read_jsonl(final_path)
         if final_errors:
@@ -2455,17 +2741,135 @@ def store_review(
         )
 
 
+def store_blind_recheck(
+    state: State,
+    *,
+    row: sqlite3.Row,
+    run_id: str,
+    solution: dict[str, Any],
+    matched: bool,
+    invocation_dir: Path,
+    meta: dict[str, Any],
+    expected_final_sha256: str,
+) -> None:
+    attempt_number = meta.get("attempt")
+    artifact_dir = invocation_dir
+    if isinstance(attempt_number, int):
+        candidate = invocation_dir / f"try-{attempt_number:02d}"
+        if candidate.is_dir():
+            artifact_dir = candidate
+    record = {
+        "question_key": str(row["question_key"]),
+        "id": str(row["qid"]),
+        "node_dir": str(row["node_dir"]),
+        "run_id": run_id,
+        "answer": str(solution.get("answer", "")),
+        "question_valid": bool(solution.get("question_valid")),
+        "matched": matched,
+        "question_snapshot_sha256": public_question_snapshot_sha256(row),
+        "final_content_sha256": expected_final_sha256,
+        "invocation_dir": safe_rel(artifact_dir, state.root),
+        "prompt_sha256": str(meta.get("prompt_sha256", "")),
+        "response_sha256": str(meta.get("response_sha256", "")),
+        "created_at": utc_now(),
+    }
+    with state.connect() as conn:
+        conn.execute(
+            """
+            INSERT OR REPLACE INTO blind_rechecks(
+                question_key,run_id,answer,solution,independent_check,
+                question_valid,matched,question_snapshot_sha256,final_content_sha256,
+                invocation_dir,prompt_sha256,response_sha256,created_at
+            ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)
+            """,
+            (
+                row["question_key"],
+                run_id,
+                record["answer"],
+                str(solution.get("solution", "")),
+                str(solution.get("independent_check", "")),
+                int(record["question_valid"]),
+                int(matched),
+                record["question_snapshot_sha256"],
+                expected_final_sha256,
+                record["invocation_dir"],
+                record["prompt_sha256"],
+                record["response_sha256"],
+                record["created_at"],
+            ),
+        )
+    append_jsonl(state.blind_rechecks_path, record)
+
+
+def latest_valid_blind_recheck(
+    state: State, row: sqlite3.Row
+) -> sqlite3.Row | None:
+    """Return the newest passing certificate for the exact current final bytes."""
+    expected_snapshot = public_question_snapshot_sha256(row)
+    expected_final = final_content_sha256(row)
+    with state.connect() as conn:
+        return conn.execute(
+            """
+            SELECT * FROM blind_rechecks
+            WHERE question_key=? AND matched=1 AND question_valid=1
+              AND question_snapshot_sha256=? AND final_content_sha256=?
+            ORDER BY created_at DESC,run_id DESC LIMIT 1
+            """,
+            (row["question_key"], expected_snapshot, expected_final),
+        ).fetchone()
+
+
+def remove_rejected_generated_final_from_source(state: State, row: sqlite3.Row) -> None:
+    """Remove a generated final that failed the separate blind delivery gate."""
+    if str(row["source_kind"]) != "generated":
+        return
+    qfile = state.bank / str(row["question_file"])
+    questions, errors = read_jsonl(qfile)
+    if errors:
+        raise ManagerError("盲解淘汰写回前源 JSONL 已损坏: " + errors[0])
+    qid = str(row["qid"])
+    matching = [item for item in questions if str(item.get("id", "")) == qid]
+    if len(matching) != 1:
+        raise ManagerError(f"盲解淘汰时源题 {qid!r} 数量不是 1")
+    if compact_json(matching[0]) != compact_json(json.loads(row["question_json"])):
+        raise ManagerError(f"盲解期间源题 {qid!r} 已变化，拒绝自动移除")
+    atomic_write_jsonl(qfile, [item for item in questions if str(item.get("id", "")) != qid])
+    final_path = state.bank / str(row["node_dir"]) / "answer_final.jsonl"
+    if final_path.is_file():
+        finals, final_errors = read_jsonl(final_path)
+        if final_errors:
+            raise ManagerError("盲解淘汰前 answer_final 已损坏: " + final_errors[0])
+        atomic_write_jsonl(
+            final_path,
+            [item for item in finals if str(item.get("id", "")) != qid],
+        )
+
+
 def public_question_snapshot(row: sqlite3.Row) -> dict[str, Any]:
     """Return the exact answer-free question snapshot shown to solvers."""
     value = sanitized_question(row)
     value.pop("user_guidance", None)
     value.pop("solution_skills", None)
+    value.pop("language_variant", None)
     value.pop("question_snapshot_sha256", None)
     return value
 
 
 def public_question_snapshot_sha256(row: sqlite3.Row) -> str:
     return sha256_text(compact_json(public_question_snapshot(row)))
+
+
+def final_content_sha256(row: sqlite3.Row) -> str:
+    question = json.loads(row["question_json"])
+    return sha256_text(
+        compact_json(
+            {
+                "question_snapshot_sha256": public_question_snapshot_sha256(row),
+                "answer": str(question.get("answer", "")),
+                "explanation_sha256": sha256_text(str(question.get("explanation", ""))),
+            }
+        )
+    )
 
 
 def store_question_annotation(
@@ -3136,6 +3540,7 @@ class Pipeline:
         prompt_names = [
             "generator-solver-prompt.md",
             "solver-prompt.md",
+            "blind-recheck-prompt.md",
             "teacher-prompt.md",
             "skill-extractor-prompt.md",
             "skill-editor-prompt.md",
@@ -3208,6 +3613,13 @@ class Pipeline:
                 "WHERE run_id=? ORDER BY question_key",
                 (run_id,),
             )]
+            blind_rechecks = [dict(row) for row in conn.execute(
+                "SELECT question_key,answer,question_valid,matched,"
+                "question_snapshot_sha256,final_content_sha256,prompt_sha256,"
+                "response_sha256,created_at FROM blind_rechecks "
+                "WHERE run_id=? ORDER BY question_key",
+                (run_id,),
+            )]
             decisions = [dict(row) for row in conn.execute(
                 "SELECT decision_id,question_key,source,answer,created_at FROM decisions "
                 "WHERE run_id=? ORDER BY created_at,decision_id",
@@ -3249,6 +3661,7 @@ class Pipeline:
             "questions": questions,
             "attempts": attempts,
             "reviews": reviews,
+            "blind_rechecks": blind_rechecks,
             "decisions": decisions,
             "solution_skill_versions": skill_versions,
             "bank_file_sha256_at_finish": dict(sorted(file_hashes.items())),
@@ -3288,10 +3701,8 @@ class Pipeline:
         run_dir: Path,
         guidance: str = "",
         guidance_by_key: dict[str, str] | None = None,
-        retry_feedback_by_key: dict[str, dict[str, Any]] | None = None,
         prefilled: dict[str, dict[str, dict[str, Any]]] | None = None,
         auto_promote: bool = True,
-        allow_post_verify_retry: bool | None = None,
         progress: Callable[[int, str], None] | None = None,
         batch_label: str = "batch-0001",
     ) -> dict[str, int]:
@@ -3305,9 +3716,6 @@ class Pipeline:
             progress(5, f"跳过 {requested_count - len(rows)} 道被其他 run 占用的题")
         keys = [row["question_key"] for row in rows]
         guidance_by_key = guidance_by_key or {}
-        retry_feedback_by_key = retry_feedback_by_key or {}
-        if allow_post_verify_retry is None:
-            allow_post_verify_retry = bool(self.state.config().get("post_verify_retry", True))
         question_skills = {
             str(row["question_key"]): solution_skill_context_for_question(self.state, row)
             for row in rows
@@ -3316,7 +3724,6 @@ class Pipeline:
             sanitized_question(
                 row,
                 guidance_by_key.get(str(row["question_key"]), guidance),
-                retry_feedback=retry_feedback_by_key.get(str(row["question_key"])),
                 solution_skills=question_skills[str(row["question_key"])],
             )
             for row in rows
@@ -3495,8 +3902,6 @@ class Pipeline:
             question_payload_by_key = {
                 str(question.get("id", "")): question for question in questions
             }
-            fallback_feedback: dict[str, dict[str, Any]] = {}
-            fallback_rows: list[sqlite3.Row] = []
             for row in rows:
                 key = row["question_key"]
                 if key not in ready_key_set:
@@ -3551,18 +3956,11 @@ class Pipeline:
                         for item in feedback
                     )
                 )
-                expected_retry = retry_feedback_by_key.get(key)
-                diagnostic_guard = True
-                if expected_retry:
-                    expected_issues = set(map(str, expected_retry.get("issue_codes", [])))
-                    expected_focus = set(map(str, expected_retry.get("focus_codes", [])))
-                    diagnostic_guard = all(
-                        set(map(str, candidates[key][agent_id].get("diagnostic_issue_codes_checked", [])))
-                        == expected_issues
-                        and set(map(str, candidates[key][agent_id].get("diagnostic_focus_codes_checked", [])))
-                        == expected_focus
-                        for agent_id in ("solver1", "solver2", "solver3")
-                    )
+                diagnostic_guard = all(
+                    candidates[key][agent_id].get("diagnostic_issue_codes_checked", []) == []
+                    and candidates[key][agent_id].get("diagnostic_focus_codes_checked", []) == []
+                    for agent_id in ("solver1", "solver2", "solver3")
+                )
                 provided_skill_ids = {
                     str(item.get("skill_id", ""))
                     for item in question_skills.get(key, [])
@@ -3616,7 +4014,9 @@ class Pipeline:
                     final_question["answer"] = str(review.get("teacher_answer", ""))
                     final_question["explanation"] = str(review.get("teacher_solution", ""))
                     try:
-                        validate_with_bank_contract(self.state, final_question)
+                        validate_with_bank_contract(
+                            self.state, final_question, node_dir=str(row["node_dir"])
+                        )
                     except ManagerError as exc:
                         # Downgrade only this item when Teacher introduces a
                         # format violation; never abort its valid siblings.
@@ -3677,71 +4077,6 @@ class Pipeline:
                         solution=str(review.get("teacher_solution", "")),
                     )
                     counts[status] += 1
-                    retry_payload = render_retry_feedback(review)
-                    if (
-                        allow_post_verify_retry
-                        and status == "disagreement"
-                        and retry_payload is not None
-                    ):
-                        fallback_feedback[key] = retry_payload
-                        fallback_rows.append(row)
-            if fallback_rows:
-                if progress:
-                    progress(88, f"Teacher 已给出诊断；{len(fallback_rows)} 题进入一次兜底重解")
-                child_run_id = new_run_id("postverify")
-                child_request = {
-                    "parent_run_id": run_id,
-                    "trigger": "teacher_code_only_retry_feedback",
-                    "question_feedback": {
-                        key: {
-                            "feedback_sha256": value["feedback_sha256"],
-                            "issue_codes": value["issue_codes"],
-                            "focus_codes": value["focus_codes"],
-                        }
-                        for key, value in fallback_feedback.items()
-                    },
-                    "max_retry_rounds": 1,
-                }
-                child_dir = self.create_manifest(
-                    child_run_id,
-                    "post_verification_retry",
-                    child_request,
-                )
-                child_error = ""
-                try:
-                    child_counts = self.audit_rows(
-                        fallback_rows,
-                        run_id=child_run_id,
-                        run_dir=child_dir,
-                        guidance_by_key={
-                            key: guidance_by_key.get(key, guidance)
-                            for key in fallback_feedback
-                        },
-                        retry_feedback_by_key=fallback_feedback,
-                        auto_promote=auto_promote,
-                        allow_post_verify_retry=False,
-                        progress=progress,
-                        batch_label="retry-round-0002",
-                    )
-                except Exception as exc:
-                    child_error = str(exc)
-                    child_counts = {"final": 0, "disagreement": 0, "invalid": 0, "error": 0}
-                    for retry_row in fallback_rows:
-                        status = str(get_question_row(self.state, retry_row["question_key"])["status"])
-                        child_counts[status if status in child_counts else "error"] += 1
-                self.finish_manifest(
-                    child_dir,
-                    {
-                        "parent_run_id": run_id,
-                        "counts": child_counts,
-                        "error": child_error or None,
-                    },
-                )
-                counts["disagreement"] = max(
-                    0, counts["disagreement"] - len(fallback_rows)
-                )
-                for status, value in child_counts.items():
-                    counts[status] += value
             if progress:
                 progress(95, "Teacher 审核已落盘")
             return counts
@@ -3849,6 +4184,308 @@ class Pipeline:
         self.finish_manifest(run_dir, result)
         return result
 
+    def blind_recheck(
+        self,
+        *,
+        targets: Sequence[str],
+        subject: str | None,
+        batch_size: int,
+        force: bool,
+        dry_run: bool,
+    ) -> dict[str, Any]:
+        """Independently re-solve current finals without exposing stored answers.
+
+        This is intentionally a separate one-agent delivery gate rather than a
+        fourth participant in the original consensus.  It receives only the
+        answer-free public snapshot, writes its own hashed invocation, and can
+        never promote a question.  A mismatch demotes an existing seed for
+        review; a generated mismatch is removed from the authoritative JSONL so
+        the normal expansion command can generate a fresh replacement.
+        """
+        scopes = normalize_target_scopes(self.state.bank, targets)
+        scan = scan_bank(self.state, scopes, subject)
+        files = resolve_scope(self.state.bank, scopes)
+        allowed_nodes = {safe_rel(path.parent, self.state.bank) for path in files}
+        placeholders = ",".join("?" for _ in allowed_nodes) or "''"
+        params: list[Any] = sorted(allowed_nodes)
+        sql = (
+            f"SELECT * FROM questions WHERE status='final' "
+            f"AND node_dir IN ({placeholders})"
+        )
+        if subject:
+            sql += " AND subject=?"
+            params.append(subject)
+        sql += " ORDER BY node_dir,qid"
+        with self.state.connect() as conn:
+            final_rows = list(conn.execute(sql, params))
+        rows = [
+            row
+            for row in final_rows
+            if force or latest_valid_blind_recheck(self.state, row) is None
+        ]
+        preview: dict[str, Any] = {
+            "scan": scan,
+            "targets": scopes,
+            "eligible_finals": len(final_rows),
+            "already_certified": len(final_rows) - len(rows),
+            "selected_questions": len(rows),
+            "batch_size": max(1, batch_size),
+            "dry_run": dry_run,
+        }
+        if dry_run or not rows:
+            return preview
+
+        run_id = new_run_id("blind-recheck")
+        run_dir = self.create_manifest(
+            run_id,
+            "blind-recheck",
+            {
+                "targets": scopes,
+                "subject": subject,
+                "selected_questions": len(rows),
+                "batch_size": max(1, batch_size),
+                "force": force,
+                "answer_exposure": False,
+            },
+        )
+        result_counts = {
+            "passed": 0,
+            "generated_rejected": 0,
+            "existing_disagreement": 0,
+            "error": 0,
+        }
+        template = load_prompt("blind-recheck-prompt.md")
+        batches = [
+            rows[start : start + max(1, batch_size)]
+            for start in range(0, len(rows), max(1, batch_size))
+        ]
+        prepared_batches: list[dict[str, Any]] = []
+        for index, batch in enumerate(batches, 1):
+            label = f"batch-{index:04d}"
+            questions: list[dict[str, Any]] = []
+            image_paths: list[Path] = []
+            seen_images: set[Path] = set()
+            expected_hashes: dict[str, str] = {}
+            for row in batch:
+                question = sanitized_question(row, solution_skills=())
+                # Make the absence of any hint or prior work explicit in the
+                # persisted request; the prompt is hashed independently too.
+                question["user_guidance"] = ""
+                image_path = question_node_image(self.state, row)
+                if image_path:
+                    resolved = image_path.resolve()
+                    question["image_attachment"] = safe_rel(resolved, self.state.bank)
+                    if resolved not in seen_images:
+                        image_paths.append(resolved)
+                        seen_images.add(resolved)
+                questions.append(question)
+                expected_hashes[str(row["question_key"])] = final_content_sha256(row)
+            request = {"questions": questions, "agent_id": "blind-recheck"}
+            prompt = render_prompt(
+                template,
+                {"QUESTION_BATCH_JSON": pretty_json({"questions": questions})},
+            )
+            invocation_dir = run_dir / label / "solver-blind-recheck"
+            prepared_batches.append(
+                {
+                    "index": index,
+                    "label": label,
+                    "batch": batch,
+                    "request": request,
+                    "prompt": prompt,
+                    "invocation_dir": invocation_dir,
+                    "image_paths": image_paths,
+                    "expected_hashes": expected_hashes,
+                }
+            )
+
+        max_parallel_batches = max(
+            1,
+            min(
+                len(prepared_batches),
+                int(getattr(self.runner, "max_processes", 1) or 1),
+            ),
+        )
+        preview["max_parallel_batches"] = max_parallel_batches
+
+        def invoke_blind_batch(
+            prepared: dict[str, Any],
+        ) -> tuple[dict[str, Any], dict[str, Any]]:
+            index = int(prepared["index"])
+            batch = prepared["batch"]
+            print(
+                f"[盲解 {index}/{len(prepared_batches)}] "
+                f"{batch[0]['node_dir']} 起 · {len(batch)} 题",
+                flush=True,
+            )
+            return self.runner.run(
+                role="solver-blind-recheck",
+                prompt=prepared["prompt"],
+                schema_path=SCRIPT_ROOT / "solver_batch.schema.json",
+                invocation_dir=prepared["invocation_dir"],
+                request=prepared["request"],
+                images=prepared["image_paths"],
+            )
+
+        invocation_results: dict[int, tuple[dict[str, Any], dict[str, Any]]] = {}
+        invocation_errors: dict[int, Exception] = {}
+        with concurrent.futures.ThreadPoolExecutor(
+            max_workers=max_parallel_batches,
+            thread_name_prefix="blind-recheck",
+        ) as executor:
+            future_to_batch = {
+                executor.submit(invoke_blind_batch, prepared): prepared
+                for prepared in prepared_batches
+            }
+            for future in concurrent.futures.as_completed(future_to_batch):
+                prepared = future_to_batch[future]
+                index = int(prepared["index"])
+                try:
+                    invocation_results[index] = future.result()
+                except Exception as exc:
+                    invocation_errors[index] = exc
+
+        # Apply model results in stable batch order.  Model calls run in
+        # parallel, while source-file writeback remains deterministic.
+        for prepared in prepared_batches:
+            index = int(prepared["index"])
+            label = str(prepared["label"])
+            batch = prepared["batch"]
+            invocation_dir = prepared["invocation_dir"]
+            expected_hashes = prepared["expected_hashes"]
+            try:
+                if index in invocation_errors:
+                    raise invocation_errors[index]
+                payload, meta = invocation_results[index]
+                raw_solutions = payload.get("solutions", [])
+                if not isinstance(raw_solutions, list):
+                    raise ManagerError("盲解响应 solutions 不是数组")
+                solution_ids = [
+                    str(item.get("id", ""))
+                    for item in raw_solutions
+                    if isinstance(item, dict)
+                ]
+                expected_ids = [str(row["question_key"]) for row in batch]
+                if len(solution_ids) != len(set(solution_ids)):
+                    raise ManagerError("盲解响应含重复 id")
+                if set(solution_ids) != set(expected_ids):
+                    missing = sorted(set(expected_ids) - set(solution_ids))
+                    extra = sorted(set(solution_ids) - set(expected_ids))
+                    raise ManagerError(
+                        f"盲解响应 id 不完整：missing={missing[:3]} extra={extra[:3]}"
+                    )
+                solutions = {
+                    str(item["id"]): item
+                    for item in raw_solutions
+                    if isinstance(item, dict)
+                }
+                evaluated: list[
+                    tuple[sqlite3.Row, dict[str, Any], str, bool]
+                ] = []
+                for original_row in batch:
+                    key = str(original_row["question_key"])
+                    current = get_question_row(self.state, key)
+                    expected_hash = expected_hashes[key]
+                    if str(current["status"]) != "final":
+                        raise ManagerError(f"盲解期间题目状态变化: {key}")
+                    if final_content_sha256(current) != expected_hash:
+                        raise ManagerError(f"盲解期间题面或最终答案变化: {key}")
+                    solution = solutions[key]
+                    expected_answer = normalize_answer(
+                        json.loads(current["question_json"]).get("answer")
+                    )
+                    clean_diagnostics = (
+                        solution.get("diagnostic_issue_codes_checked") == []
+                        and solution.get("diagnostic_focus_codes_checked") == []
+                        and solution.get("solution_skill_ids_considered") == []
+                    )
+                    complete_reasoning = bool(str(solution.get("solution", "")).strip()) and bool(
+                        str(solution.get("independent_check", "")).strip()
+                    )
+                    matched = bool(
+                        solution.get("question_valid")
+                        and clean_diagnostics
+                        and complete_reasoning
+                        and expected_answer
+                        and normalize_answer(solution.get("answer")) == expected_answer
+                    )
+                    evaluated.append((current, solution, expected_hash, matched))
+
+                batch_results: list[dict[str, Any]] = []
+                for current, solution, expected_hash, matched in evaluated:
+                    key = str(current["question_key"])
+                    store_blind_recheck(
+                        self.state,
+                        row=current,
+                        run_id=run_id,
+                        solution=solution,
+                        matched=matched,
+                        invocation_dir=invocation_dir,
+                        meta=meta,
+                        expected_final_sha256=expected_hash,
+                    )
+                    if matched:
+                        result_counts["passed"] += 1
+                        outcome = "passed"
+                    else:
+                        source_kind = str(current["source_kind"])
+                        if source_kind == "generated":
+                            remove_rejected_generated_final_from_source(self.state, current)
+                            status = "invalid"
+                            outcome = "generated_rejected"
+                        else:
+                            status = "disagreement"
+                            outcome = "existing_disagreement"
+                        with self.state.connect() as conn:
+                            cursor = conn.execute(
+                                """
+                                UPDATE questions SET status=?,teacher_verdict=?,updated_at=?
+                                WHERE question_key=? AND status='final' AND question_json=?
+                                """,
+                                (
+                                    status,
+                                    "blind_recheck_mismatch",
+                                    utc_now(),
+                                    key,
+                                    current["question_json"],
+                                ),
+                            )
+                        if cursor.rowcount != 1:
+                            raise ManagerError(f"盲解淘汰写回发生并发变化: {key}")
+                        result_counts[outcome] += 1
+                    batch_results.append(
+                        {
+                            "question_key": key,
+                            "id": current["qid"],
+                            "source_kind": current["source_kind"],
+                            "matched": matched,
+                            "outcome": outcome,
+                            "expected_final_sha256": expected_hash,
+                            "response_sha256": str(meta.get("response_sha256", "")),
+                        }
+                    )
+                atomic_write_json(
+                    run_dir / label / "blind-recheck-results.json",
+                    {"run_id": run_id, "results": batch_results},
+                )
+                print(
+                    f"  盲解 batch-{index:04d} 已落盘: "
+                    f"pass={sum(1 for item in batch_results if item['matched'])} "
+                    f"mismatch={sum(1 for item in batch_results if not item['matched'])}",
+                    flush=True,
+                )
+            except Exception as exc:
+                result_counts["error"] += len(batch)
+                atomic_write_json(
+                    run_dir / label / "blind-recheck-error.json",
+                    {"run_id": run_id, "error": str(exc), "question_count": len(batch)},
+                )
+                print(f"  ERROR: {exc}", file=sys.stderr, flush=True)
+        export_unresolved(self.state)
+        result = {**preview, "run_id": run_id, "result": result_counts}
+        self.finish_manifest(run_dir, result)
+        return result
+
     def expand(
         self,
         *,
@@ -3862,7 +4499,13 @@ class Pipeline:
         quotas = configured_quotas(self.state.config().get("quotas"))
         files = resolve_scope(self.state.bank, scope)
         nodes: list[
-            tuple[Path, list[dict[str, Any]], dict[str, dict[str, int]], int]
+            tuple[
+                Path,
+                list[dict[str, Any]],
+                dict[str, dict[str, int]],
+                int,
+                set[str],
+            ]
         ] = []
         for qfile in files:
             rows, errors = read_jsonl(qfile)
@@ -3870,14 +4513,26 @@ class Pipeline:
                 continue
             if subject and rows and str(rows[0].get("subject", "")) != subject:
                 continue
-            deficits = quota_deficits(rows, quotas)
+            quota_eligible_ids = expansion_quota_eligible_ids(
+                self.state, qfile, rows
+            )
+            deficits = quota_deficits(
+                [
+                    row
+                    for row in rows
+                    if str(row.get("id", "")) in quota_eligible_ids
+                ],
+                quotas,
+            )
             safe_repairs = count_safe_format_repairs(rows)
             if (
                 sum(sum(pool.values()) for pool in deficits.values()) > 0
                 or any(not q.get("difficulty") or not q.get("pool") for q in rows)
                 or safe_repairs > 0
             ):
-                nodes.append((qfile, rows, deficits, safe_repairs))
+                nodes.append(
+                    (qfile, rows, deficits, safe_repairs, quota_eligible_ids)
+                )
         nodes.sort(key=lambda item: safe_rel(item[0], self.state.bank))
         if node_limit is not None:
             nodes = nodes[: max(0, node_limit)]
@@ -3892,14 +4547,16 @@ class Pipeline:
                         - sum(
                             1
                             for row in rows
-                            if not row.get("difficulty") or not row.get("pool")
+                            if str(row.get("id", "")) in quota_eligible_ids
+                            and question_counts_toward_quota(row)
+                            and (not row.get("difficulty") or not row.get("pool"))
                         ),
                     )
-                    for _, rows, deficits, _ in nodes
+                    for _, rows, deficits, _, quota_eligible_ids in nodes
                 ),
                 "maximum": sum(
                     sum(sum(pool.values()) for pool in deficits.values())
-                    for _, _, deficits, _ in nodes
+                    for _, _, deficits, _, _ in nodes
                 ),
             },
             "unclassified_existing_questions": sum(
@@ -3908,9 +4565,11 @@ class Pipeline:
                     for row in rows
                     if not row.get("difficulty") or not row.get("pool")
                 )
-                for _, rows, _, _ in nodes
+                for _, rows, _, _, _ in nodes
             ),
-            "safe_format_repairs": sum(repairs for _, _, _, repairs in nodes),
+            "safe_format_repairs": sum(
+                repairs for _, _, _, repairs, _ in nodes
+            ),
             "quotas": quotas,
             "dry_run": dry_run,
         }
@@ -3929,16 +4588,51 @@ class Pipeline:
             "invalid": 0,
             "error": 0,
             "normalized": 0,
+            "regeneration_needed": 0,
         }
         template = load_prompt("generator-solver-prompt.md")
-        for index, (qfile, existing, deficits, _) in enumerate(nodes, 1):
+        for index, (
+            qfile,
+            existing,
+            deficits,
+            _,
+            quota_eligible_ids,
+        ) in enumerate(nodes, 1):
             node_rel = safe_rel(qfile.parent, self.state.bank)
             node_dir = run_dir / f"node-{index:04d}-{sha256_text(node_rel)[:10]}"
             ref_path = qfile.parent / "reference.md"
             reference = ref_path.read_text(encoding="utf-8") if ref_path.exists() else ""
+            with self.state.connect() as conn:
+                prior_rejected_rows = list(
+                    conn.execute(
+                        "SELECT question_json,status FROM questions "
+                        "WHERE node_dir=? AND source_kind='generated' "
+                        "AND status IN ('disagreement','invalid','error') "
+                        "ORDER BY updated_at DESC",
+                        (node_rel,),
+                    )
+                )
+            rejected_generated_questions: list[dict[str, str]] = []
+            rejected_prompts: set[str] = set()
+            for rejected_row in prior_rejected_rows:
+                rejected_question = json.loads(rejected_row["question_json"])
+                rejected_prompt = str(rejected_question.get("prompt", "")).strip()
+                if not rejected_prompt or rejected_prompt in rejected_prompts:
+                    continue
+                rejected_prompts.add(rejected_prompt)
+                if len(rejected_generated_questions) < 40:
+                    rejected_generated_questions.append(
+                        {
+                            "difficulty": str(rejected_question.get("difficulty", "")),
+                            "pool": str(rejected_question.get("pool", "")),
+                            "prompt": rejected_prompt,
+                            "status": str(rejected_row["status"]),
+                        }
+                    )
             request = {
                 "node_dir": node_rel,
                 "node_id": qfile.parent.name,
+                "language_variant": language_variant_for_node(node_rel),
                 "subject": str(existing[0].get("subject", qfile.parent.parent.name)) if existing else qfile.parent.parent.name,
                 "reference": reference[:30000],
                 "existing_questions": [
@@ -3946,6 +4640,10 @@ class Pipeline:
                         "id": q.get("id"),
                         "difficulty": q.get("difficulty", ""),
                         "pool": q.get("pool", ""),
+                        "quota_eligible": (
+                            str(q.get("id", "")) in quota_eligible_ids
+                            and question_counts_toward_quota(q)
+                        ),
                         "prompt": q.get("prompt", ""),
                         "options": q.get("options", []),
                     }
@@ -3953,6 +4651,7 @@ class Pipeline:
                 ],
                 "target_counts": quotas,
                 "deficits_before_classification": deficits,
+                "rejected_generated_questions": rejected_generated_questions,
             }
             request["solution_skills"] = solution_skill_context_for_text(
                 self.state,
@@ -3972,6 +4671,7 @@ class Pipeline:
             images = [p for p in sorted(qfile.parent.glob("question.*")) if p.suffix.lower() in {".png", ".jpg", ".jpeg", ".webp"}]
             print(f"[{index}/{len(nodes)}] 生成 {node_rel}", flush=True)
             generated_rows: list[sqlite3.Row] = []
+            generated_candidate_keys: set[str] = set()
             try:
                 total["normalized"] += apply_safe_format_repairs(self.state, qfile)
                 needs_generation = (
@@ -3998,14 +4698,25 @@ class Pipeline:
                 # before checking generated siblings so one malformed new item cannot
                 # strand all pre-existing questions in an unclassified state.
                 apply_classifications(self.state, qfile, classifications)
-                expected_counts = quota_deficits(classified_existing, quotas)
+                expected_counts = quota_deficits(
+                    [
+                        row
+                        for row in classified_existing
+                        if str(row.get("id", "")) in quota_eligible_ids
+                    ],
+                    quotas,
+                )
                 generated_items = [
                     item for item in payload.get("questions", []) if isinstance(item, dict)
                 ]
                 prompts = [str(item.get("prompt", "")).strip() for item in generated_items]
                 existing_prompts = {str(item.get("prompt", "")).strip() for item in existing}
-                if len(set(prompts)) != len(prompts) or any(prompt in existing_prompts for prompt in prompts):
-                    raise ManagerError("生成题与现有题或同批生成题重复")
+                if (
+                    len(set(prompts)) != len(prompts)
+                    or any(prompt in existing_prompts for prompt in prompts)
+                    or any(prompt in rejected_prompts for prompt in prompts)
+                ):
+                    raise ManagerError("生成题与现有题、历史淘汰题或同批生成题重复")
                 for generated in generated_items:
                     validate_generated_question(generated)
                 selected_items, quota_overflow = cap_generated_to_deficits(
@@ -4022,6 +4733,8 @@ class Pipeline:
                     qid = f"pb_{subject_name}_{qfile.parent.name}_gen_{prompt_hash}"
                     qfile_rel = safe_rel(qfile, self.state.bank)
                     key = question_key(qfile_rel, qid)
+                    if id(generated) not in overflow_ids:
+                        generated_candidate_keys.add(key)
                     question = {
                         "id": qid,
                         "nodeId": qfile.parent.name,
@@ -4053,7 +4766,9 @@ class Pipeline:
                         )
                     else:
                         try:
-                            validate_with_bank_contract(self.state, question)
+                            validate_with_bank_contract(
+                                self.state, question, node_dir=node_rel
+                            )
                         except ManagerError as exc:
                             rejected.append((key, qid, question, candidate, str(exc)))
                         else:
@@ -4144,6 +4859,11 @@ class Pipeline:
                     )
                 print(f"  ERROR: {exc}", file=sys.stderr, flush=True)
                 total["error"] += 1
+            total["regeneration_needed"] += sum(
+                1
+                for key in generated_candidate_keys
+                if str(get_question_row(self.state, key)["status"]) != "final"
+            )
         export_unresolved(self.state)
         result = {**preview, "run_id": run_id, "result": total}
         self.finish_manifest(run_dir, result)
@@ -4606,18 +5326,82 @@ def quota_deficits(
 ) -> dict[str, dict[str, int]]:
     quotas = configured_quotas(quotas)
     result: dict[str, dict[str, int]] = {}
+    eligible_rows = [row for row in rows if question_counts_toward_quota(row)]
     for difficulty in ("low", "mid", "high"):
         display = sum(
-            1 for q in rows if q.get("difficulty") == difficulty and q.get("pool") == "display"
+            1
+            for q in eligible_rows
+            if q.get("difficulty") == difficulty and q.get("pool") == "display"
         )
         exam = sum(
-            1 for q in rows if q.get("difficulty") == difficulty and q.get("pool") == "exam"
+            1
+            for q in eligible_rows
+            if q.get("difficulty") == difficulty and q.get("pool") == "exam"
         )
         result[difficulty] = {
             "display": max(0, quotas[difficulty]["display"] - display),
             "exam": max(0, quotas[difficulty]["exam"] - exam),
         }
     return result
+
+
+def question_counts_toward_quota(question: dict[str, Any]) -> bool:
+    """Only structurally deliverable single-choice rows satisfy a quota slot."""
+    options = question.get("options")
+    return bool(
+        str(question.get("prompt", "")).strip()
+        and question.get("answer") in {"A", "B", "C", "D"}
+        and isinstance(options, list)
+        and len(options) == 4
+        and [
+            str(option.get("id", ""))
+            for option in options
+            if isinstance(option, dict)
+        ]
+        == ["A", "B", "C", "D"]
+        and all(
+            isinstance(option, dict) and str(option.get("text", "")).strip()
+            for option in options
+        )
+    )
+
+
+def expansion_quota_eligible_ids(
+    state: State,
+    question_file: Path,
+    rows: Sequence[dict[str, Any]],
+) -> set[str]:
+    """Return source ids that may satisfy a future delivery quota.
+
+    Pending/running rows still count during the initial expand-before-audit
+    pass. Once a source seed is known to be disagreement/invalid/error it stays
+    preserved for human audit (in source or the portable review queue), but no
+    longer occupies a delivery quota slot; a later expand can therefore
+    generate a clean replacement without discarding the seed review obligation.
+    """
+    qfile_rel = safe_rel(question_file, state.bank)
+    keys = {
+        question_key(qfile_rel, str(row.get("id", ""))): str(row.get("id", ""))
+        for row in rows
+        if str(row.get("id", ""))
+    }
+    if not keys:
+        return set()
+    placeholders = ",".join("?" for _ in keys)
+    with state.connect() as conn:
+        status_by_key = {
+            str(item["question_key"]): str(item["status"])
+            for item in conn.execute(
+                f"SELECT question_key,status FROM questions "
+                f"WHERE question_key IN ({placeholders})",
+                list(keys),
+            )
+        }
+    return {
+        qid
+        for key, qid in keys.items()
+        if status_by_key.get(key, "pending") not in UNRESOLVED_STATUSES
+    }
 
 
 def classified_rows_for_generation(
@@ -4791,7 +5575,12 @@ def validate_generated_question(item: dict[str, Any]) -> None:
         raise ManagerError("生成题试做过程为空")
 
 
-def validate_with_bank_contract(state: State, question: dict[str, Any]) -> None:
+def validate_with_bank_contract(
+    state: State,
+    question: dict[str, Any],
+    *,
+    node_dir: str | None = None,
+) -> None:
     """Apply a bank-provided per-question validator before source writeback."""
     validator_path = state.bank / "validate.py"
     if not validator_path.is_file():
@@ -4810,7 +5599,22 @@ def validate_with_bank_contract(state: State, question: dict[str, Any]) -> None:
         VALIDATOR_CACHE.clear()
         VALIDATOR_CACHE[cache_key] = check_question
     try:
-        violations = check_question(question, 1)
+        signature = inspect.signature(check_question)
+        accepts_locale = (
+            "locale" in signature.parameters
+            or any(
+                parameter.kind == inspect.Parameter.VAR_KEYWORD
+                for parameter in signature.parameters.values()
+            )
+        )
+        if accepts_locale:
+            violations = check_question(
+                question,
+                1,
+                locale=language_variant_for_node(node_dir or ""),
+            )
+        else:
+            violations = check_question(question, 1)
     except Exception as exc:
         raise ManagerError(f"题库 check_question 执行失败: {exc}") from exc
     if violations:
@@ -4873,6 +5677,7 @@ def question_detail(state: State, key: str) -> dict[str, Any]:
         "question_key": key,
         "id": row["qid"],
         "node_dir": row["node_dir"],
+        "question_file": row["question_file"],
         "subject": row["subject"],
         "source_kind": row["source_kind"],
         "status": row["status"],
@@ -5279,16 +6084,29 @@ def export_unresolved(state: State) -> dict[str, int]:
                 UNRESOLVED_STATUSES,
             )
         )
-    unresolved: list[dict[str, Any]] = []
+    fresh_unresolved: list[dict[str, Any]] = []
     reviews_by_node: dict[str, list[dict[str, Any]]] = {}
+    authoritative_ids_by_node: dict[str, set[str]] = {}
+    question_files = resolve_scope(state.bank, None)
+    for question_file in question_files:
+        node_dir = safe_rel(question_file.parent, state.bank)
+        source_rows, source_errors = read_jsonl(question_file)
+        if source_errors:
+            raise ManagerError("export 前 questions.jsonl 损坏: " + source_errors[0])
+        authoritative_ids_by_node[node_dir] = {
+            str(item.get("id", "")) for item in source_rows
+        }
     for item in rows:
         detail = question_detail(state, item["question_key"])
-        unresolved.append(
+        fresh_unresolved.append(
             {
+                "review_queue_schema_version": REVIEW_QUEUE_SCHEMA_VERSION,
                 "question_key": detail["question_key"],
                 "id": detail["id"],
                 "node_dir": detail["node_dir"],
+                "question_file": detail["question_file"],
                 "subject": detail["subject"],
+                "source_kind": detail["source_kind"],
                 "status": detail["status"],
                 "question": detail["question"],
                 "attempts": detail["attempts"],
@@ -5296,7 +6114,46 @@ def export_unresolved(state: State) -> dict[str, int]:
                 "updated_at": detail["updated_at"],
             }
         )
+    # A scoped server may have indexed only one cohort. Preserve portable rows
+    # whose keys are absent from this SQLite state; otherwise accepting one
+    # Shanghai seed could silently erase an unscanned Hong Kong review queue.
+    queue_path = portable_review_queue_path(state)
+    previous_queue, queue_errors = read_jsonl(queue_path)
+    if queue_errors:
+        raise ManagerError("portable review queue 损坏，拒绝覆盖: " + queue_errors[0])
+    with state.connect() as conn:
+        known_status = {
+            str(row["question_key"]): str(row["status"])
+            for row in conn.execute("SELECT question_key,status FROM questions")
+        }
+    merged_by_key = {
+        str(item["question_key"]): item for item in fresh_unresolved
+    }
+    previous_keys: set[str] = set()
+    for previous in previous_queue:
+        key = str(previous.get("question_key", "")).strip()
+        if not key:
+            raise ManagerError("portable review queue 含缺少 question_key 的记录")
+        if key in previous_keys:
+            raise ManagerError(f"portable review queue 重复 question_key: {key}")
+        previous_keys.add(key)
+        if key in merged_by_key or known_status.get(key) == "final":
+            continue
+        preserved = dict(previous)
+        preserved.setdefault("review_queue_schema_version", REVIEW_QUEUE_SCHEMA_VERSION)
+        node_dir = str(preserved.get("node_dir", ""))
+        preserved.setdefault("question_file", f"{node_dir}/questions.jsonl")
+        preserved.setdefault(
+            "source_kind",
+            "seed_review" if is_seed_question_id(str(preserved.get("id", ""))) else "generated",
+        )
+        merged_by_key[key] = preserved
+    unresolved = sorted(
+        merged_by_key.values(),
+        key=lambda item: (str(item.get("node_dir", "")), str(item.get("id", ""))),
+    )
     atomic_write_jsonl(state.bank / "错题集.jsonl", unresolved)
+    atomic_write_jsonl(queue_path, unresolved)
     with state.connect() as conn:
         reviewed_keys = [row["question_key"] for row in conn.execute(
             "SELECT DISTINCT question_key FROM reviews"
@@ -5307,6 +6164,15 @@ def export_unresolved(state: State) -> dict[str, int]:
         if not review:
             continue
         row = get_question_row(state, key)
+        # Rejected generated candidates intentionally remain in SQLite and the
+        # unresolved audit log, but are not authoritative bank questions.  Do
+        # not leak their stale reviews into answer_review.jsonl, where the
+        # delivery validator correctly treats them as orphan records.
+        if str(row["qid"]) not in authoritative_ids_by_node.get(
+            detail["node_dir"], set()
+        ):
+            continue
+        blind = latest_valid_blind_recheck(state, row)
         reviews_by_node.setdefault(detail["node_dir"], []).append(
             {
                 "id": detail["id"],
@@ -5323,11 +6189,36 @@ def export_unresolved(state: State) -> dict[str, int]:
                 "process_review": review["process_review"],
                 "run_id": review["run_id"],
                 "reviewed_on": review["created_at"],
+                "blind_recheck": (
+                    {
+                        "status": "pass",
+                        "matched": True,
+                        "answer": blind["answer"],
+                        "question_valid": bool(blind["question_valid"]),
+                        "question_snapshot_sha256": blind[
+                            "question_snapshot_sha256"
+                        ],
+                        "final_content_sha256": blind["final_content_sha256"],
+                        "response_sha256": blind["response_sha256"],
+                        "run_id": blind["run_id"],
+                        "checked_on": blind["created_at"],
+                    }
+                    if blind is not None
+                    else None
+                ),
             }
         )
-    for node_dir, node_reviews in reviews_by_node.items():
-        atomic_write_jsonl(state.bank / node_dir / "answer_review.jsonl", node_reviews)
-    return {"unresolved": len(unresolved), "review_files": len(reviews_by_node)}
+    for node_dir in sorted(authoritative_ids_by_node):
+        node_reviews = reviews_by_node.get(node_dir, [])
+        atomic_write_jsonl(
+            state.bank / node_dir / "answer_review.jsonl",
+            sorted(node_reviews, key=lambda item: str(item.get("id", ""))),
+        )
+    return {
+        "unresolved": len(unresolved),
+        "portable_review_queue": len(unresolved),
+        "review_files": len(authoritative_ids_by_node),
+    }
 
 
 def verify_state(state: State) -> dict[str, Any]:
@@ -5367,6 +6258,11 @@ def verify_state(state: State) -> dict[str, Any]:
         skill_version_rows = (
             list(conn.execute("SELECT * FROM solution_skill_versions"))
             if "solution_skill_versions" in table_names
+            else []
+        )
+        blind_rows = (
+            list(conn.execute("SELECT * FROM blind_rechecks"))
+            if "blind_rechecks" in table_names
             else []
         )
     finally:
@@ -5504,6 +6400,59 @@ def verify_state(state: State) -> dict[str, Any]:
             "无 v2 retry/annotation 字段；已按其原始 artifact 兼容核验"
         )
 
+    question_rows_by_key = {str(row["question_key"]): row for row in rows}
+    valid_blind_keys: set[str] = set()
+    for blind in blind_rows:
+        key = str(blind["question_key"])
+        question_row = question_rows_by_key.get(key)
+        if question_row is None:
+            errors.append(f"blind recheck {key}: 对应题目不存在")
+            continue
+        invocation_dir = state.root / str(blind["invocation_dir"])
+        invocation_root = (
+            invocation_dir.parent
+            if re.fullmatch(r"try-\d+", invocation_dir.name)
+            else invocation_dir
+        )
+        prompt_path = invocation_root / "prompt.md"
+        response_path = invocation_dir / "response.json"
+        if not prompt_path.is_file() or sha256_file(prompt_path) != blind["prompt_sha256"]:
+            errors.append(f"blind recheck {key}: prompt artifact 缺失或哈希不匹配")
+        if not response_path.is_file() or sha256_file(response_path) != blind["response_sha256"]:
+            errors.append(f"blind recheck {key}: response artifact 缺失或哈希不匹配")
+        if not bool(blind["matched"]):
+            continue
+        expected_snapshot = public_question_snapshot_sha256(question_row)
+        expected_final = final_content_sha256(question_row)
+        expected_answer = normalize_answer(
+            json.loads(question_row["question_json"]).get("answer")
+        )
+        if not bool(blind["question_valid"]):
+            errors.append(f"blind recheck {key}: matched 记录却未确认 question_valid")
+        if str(blind["question_snapshot_sha256"]) != expected_snapshot:
+            errors.append(f"blind recheck {key}: 题面快照哈希不匹配")
+        if str(blind["final_content_sha256"]) != expected_final:
+            errors.append(f"blind recheck {key}: final content 哈希不匹配")
+        if normalize_answer(blind["answer"]) != expected_answer:
+            errors.append(f"blind recheck {key}: 独立答案与最终答案不一致")
+        if (
+            bool(blind["question_valid"])
+            and str(blind["question_snapshot_sha256"]) == expected_snapshot
+            and str(blind["final_content_sha256"]) == expected_final
+            and normalize_answer(blind["answer"]) == expected_answer
+        ):
+            valid_blind_keys.add(key)
+    uncertified_final_keys = {
+        str(row["question_key"])
+        for row in rows
+        if str(row["status"]) == "final"
+    } - valid_blind_keys
+    if uncertified_final_keys:
+        warnings.append(
+            f"{len(uncertified_final_keys)} 道 final 尚无当前内容的独立盲解证书；"
+            "交付 validate.py --delivery 会拒绝这些题"
+        )
+
     versions_by_skill: dict[str, dict[int, sqlite3.Row]] = {}
     for version in skill_version_rows:
         skill_id = str(version["skill_id"])
@@ -5559,20 +6508,7 @@ def verify_state(state: State) -> dict[str, Any]:
     invocation_files = list(state.runs_dir.rglob("invocation.json"))
     teacher_requests: list[tuple[Path, str, dict[str, Any]]] = []
     solver_inputs: dict[str, dict[str, Any]] = {}
-    solver_question_fields = {
-        "id",
-        "display_id",
-        "subject",
-        "prompt",
-        "options",
-        "difficulty",
-        "question_type",
-        "user_guidance",
-        "image_attachment",
-        "question_snapshot_sha256",
-        "solution_skills",
-        "verification_feedback",
-    }
+    solver_question_fields = SOLVER_QUESTION_FIELDS
     for invocation_path in invocation_files:
         try:
             invocation = json.loads(invocation_path.read_text(encoding="utf-8"))
@@ -5601,16 +6537,25 @@ def verify_state(state: State) -> dict[str, Any]:
                 if sha256_text(compact_json(request)) != invocation.get("request_sha256"):
                     errors.append(f"{request_path}: request SHA-256 不匹配")
                 role = str(invocation.get("role", ""))
-                if role in {"solver1", "solver2", "solver3"}:
+                if role in {
+                    "solver1",
+                    "solver2",
+                    "solver3",
+                    "solver-blind-recheck",
+                }:
                     modern_solver_contract = str(
                         invocation.get("contract_version") or ""
                     ) == SCHEMA_VERSION
                     if set(request) != {"questions", "agent_id"}:
                         errors.append(f"{request_path}: solver request 顶层字段不符合白名单")
-                    if str(request.get("agent_id", "")) != role:
+                    expected_agent_id = (
+                        "blind-recheck" if role == "solver-blind-recheck" else role
+                    )
+                    if str(request.get("agent_id", "")) != expected_agent_id:
                         errors.append(f"{request_path}: agent_id 与 invocation role 不一致")
-                    batch_key = invocation_path.parent.parent.resolve().as_posix()
-                    solver_inputs.setdefault(batch_key, {})[role] = request.get("questions")
+                    if role != "solver-blind-recheck":
+                        batch_key = invocation_path.parent.parent.resolve().as_posix()
+                        solver_inputs.setdefault(batch_key, {})[role] = request.get("questions")
                     solver_questions = request.get("questions")
                     if not isinstance(solver_questions, list):
                         errors.append(f"{request_path}: questions 必须是数组")
@@ -5664,6 +6609,14 @@ def verify_state(state: State) -> dict[str, Any]:
                                 )
                             ) != feedback_value.get("feedback_sha256"):
                                 errors.append(f"{request_path}: verification_feedback SHA-256 不匹配")
+                        if role == "solver-blind-recheck" and (
+                            question.get("user_guidance") != ""
+                            or question.get("solution_skills") != []
+                            or "verification_feedback" in question
+                        ):
+                            errors.append(
+                                f"{request_path}: 盲解 request 不得含 guidance、skill 或 Teacher feedback"
+                            )
                     marker = "QUESTION_BATCH_JSON\n"
                     if marker not in prompt_value:
                         errors.append(f"{prompt_path}: 缺少 QUESTION_BATCH_JSON 边界")
@@ -5978,6 +6931,8 @@ def verify_state(state: State) -> dict[str, Any]:
         "ok": not errors,
         "questions": len(rows),
         "reviews": len(review_rows),
+        "blind_rechecks": len(blind_rows),
+        "blind_certified_finals": len(valid_blind_keys),
         "agent_attempt_meta": len(meta_files),
         "solution_skills": len(skill_rows),
         "solution_skill_versions": len(skill_version_rows),
@@ -6840,6 +7795,23 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--no-auto-promote", action="store_true")
     p.add_argument("--dry-run", action="store_true")
 
+    p = subs.add_parser(
+        "blind-recheck",
+        help="剥离答案后用独立 Agent 重解 final，生成交付复核证书",
+    )
+    add_common(p)
+    add_agent_options(p)
+    p.add_argument(
+        "--target",
+        action="append",
+        required=True,
+        help="题库内目录或 questions.jsonl；可重复",
+    )
+    p.add_argument("--subject")
+    p.add_argument("--batch-size", type=int, default=15)
+    p.add_argument("--force", action="store_true", help="重新复核已有有效证书的 final")
+    p.add_argument("--dry-run", action="store_true")
+
     p = subs.add_parser("expand", help="生成缺失的举一反三题并核验")
     add_common(p)
     add_agent_options(p)
@@ -6938,7 +7910,13 @@ def main(argv: Sequence[str] | None = None) -> int:
             state.ensure()
             print(pretty_json(summary(state)), end="")
             return 0
-        if args.command in {"audit", "expand", "run", "curate-skills"}:
+        if args.command in {
+            "audit",
+            "blind-recheck",
+            "expand",
+            "run",
+            "curate-skills",
+        }:
             state.ensure()
             pipeline = Pipeline(
                 state,
@@ -6961,6 +7939,14 @@ def main(argv: Sequence[str] | None = None) -> int:
                     include_disagreements=args.include_disagreements,
                     force=args.force,
                     auto_promote=not args.no_auto_promote,
+                    dry_run=args.dry_run,
+                )
+            elif args.command == "blind-recheck":
+                result = pipeline.blind_recheck(
+                    targets=args.target,
+                    subject=args.subject,
+                    batch_size=max(1, args.batch_size),
+                    force=args.force,
                     dry_run=args.dry_run,
                 )
             elif args.command == "expand":

@@ -10,11 +10,11 @@
     python3 validate.py cn-nanjing-g11-2026/物理 \
         --prepare-delivery /absolute/path/to/delivery
 
-普通模式检查题目结构、配额、公式和解析质量。``--delivery`` 还检查
+普通模式检查题目结构、配额、公式、语言和解析质量。``--delivery`` 还检查
 ``answer_review.jsonl`` 与最终题面/答案/解析的一致性，并拒绝交付目录中的
 ``answer_final.jsonl`` 和三路原始答案文件。``--prepare-delivery`` 从工作题库
 生成一个全新的干净目录；它只收录 Teacher 严格通过、manager 已 final 且所有哈希一致的题目，
-不会删除或改写源题库。
+不会删除或改写源题库，并生成可复算的 ``manifest.json``。
 
 本模块的 ``check_question(question, line_no)`` 是 manager 写回前使用的稳定
 逐题契约。请保持该函数无外部依赖、无文件写入。
@@ -61,6 +61,8 @@ OPTIONAL_SOURCE_ASSETS = ("reference.md", "question.png", "question.jpg", "quest
 # This deliberately catches the tab/carriage-return damage produced by JSON
 # strings such as ``\times`` or ``\rm`` when a backslash is mishandled.
 CONTROL_CHARS = re.compile(r"[\x00-\x09\x0b-\x1f\x7f]")
+ANSI_ESCAPE = re.compile(r"\x1b\[")
+UNICODE_MATH = re.compile(r"[≤≥≠≈∈∉⊆⊇∪∩∞√∑∏∫±×÷·°→←⇔⇒∠⊥∥△∵∴²³¹⁰₀₁₂₃]")
 LATEX_OUTSIDE_MATH = re.compile(r"\\(?:[A-Za-z]+|,)")
 NAKED_EQUATION = re.compile(
     r"(?<![A-Za-z0-9])(?:[A-Za-z][A-Za-z0-9]*|\d+(?:\.\d+)?)\s*"
@@ -114,9 +116,39 @@ MATH_NAKED_UNIT = re.compile(
     rf"(?:\\,\s*({UNIT_TOKEN})|(?<=[0-9}})])\s+({UNIT_TOKEN})|"
     rf"(?<=[0-9}})])({COMPOUND_UNIT_TOKEN}))(?![A-Za-z])"
 )
-MALFORMED_SUPERSCRIPT = re.compile(r"\^(?:\(|[-+]\s*[A-Za-z0-9]|[A-Za-z0-9]{2,})")
-MALFORMED_SUBSCRIPT = re.compile(r"_(?:\(|[-+]\s*[A-Za-z0-9]|[A-Za-z0-9]{2,})")
+# TeX consumes exactly one token after an unbraced ``^``/``_``.  Therefore
+# ``I^2R`` and ``U_MI`` are valid (the trailing R/I is a baseline symbol), as
+# is the checklist's ``m_1m_2``.  Reject only cases whose first intended token
+# is visibly grouped/sign-bearing, plus unbraced multi-digit tokens.  The old
+# ``[A-Za-z0-9]{2,}`` rule falsely rejected most ordinary physics products.
+MALFORMED_SUPERSCRIPT = re.compile(r"\^(?:\(|[-+]\s*[A-Za-z0-9]|\d{2,})")
+MALFORMED_SUBSCRIPT = re.compile(r"_(?:\(|[-+]\s*[A-Za-z0-9]|\d{2,})")
 EMPTY_EQUATION = re.compile(r"^\s*[^=\n]{1,80}=\s*$")
+MISSING_LATEX_BACKSLASH = re.compile(
+    r"(?<![\\A-Za-z])(?:times|cdot|frac|dfrac|tfrac|sqrt|rightarrow|to|approx|"
+    r"leq|geq|le|ge|ne|alpha|beta|gamma|Delta|mu|infty|sum|int|angle|circ)"
+    r"(?![A-Za-z])"
+)
+ASCII_PSEUDO_MATH = re.compile(
+    r"(?<![A-Za-z])(?:sqrt|cuberoot|frac|dfrac|cosh|sinh|tanh)\s*\("
+)
+SUBSCRIPT_HYPHEN = re.compile(r"_\{[^{}]*-\}")
+EXPONENT_GROUPING = re.compile(r"\^\{\d\d\}\s*[spdf]")
+NESTED_ROMAN = re.compile(r"\\mathrm\s*\{[^{}]*\\mathrm")
+CONCLUSION_LETTER = re.compile(
+    r"(?:故\s*[选選]|应\s*[选選]|因此\s*[选選]|所以\s*[选選]|答案\s*(?:为|為|是|[选選])|"
+    r"正确(?:选项|選項|答案)\s*(?:为|為|是)|正確(?:選項|答案)\s*(?:為|是)|正确的是|"
+    r"正確的是|对应|對應|即为|即為|即选|即選|符合的是|故为|故為)"
+    r"\s*[（(]?\s*([ABCD])(?![A-Za-z0-9])"
+)
+
+# These characters are high-signal simplified-only forms in school-question
+# prose.  The check is intentionally conservative: it catches accidental
+# Simplified output in Hong Kong nodes without pretending to be a full OpenCC
+# conversion engine or rejecting glyphs shared by both writing systems.
+SIMPLIFIED_ONLY_FOR_HK = frozenset(
+    "这个为与从选题数学过给对错发现还则当变开线点边长体图轴阶归类实设证导积总获经结节达别仅无时机广质"
+)
 
 
 def compact_json(value: Any) -> str:
@@ -179,8 +211,37 @@ def _without_text_commands(math_body: str) -> str:
     return current
 
 
-def formula_errors(value: str, *, check_chem: bool = True) -> list[str]:
+def language_variant_for_path(path: Path | str) -> str:
+    """Return the required prose variant from a cohort/node path."""
+    normalized = str(path).replace("\\", "/").lower()
+    parts = [part for part in normalized.split("/") if part]
+    if any(part.startswith("hk-") or "hongkong" in part for part in parts):
+        return "zh-Hant-HK"
+    return "zh-Hans-CN"
+
+
+def language_errors(value: str, *, locale: str | None) -> list[str]:
+    if locale != "zh-Hant-HK":
+        return []
+    found = sorted(set(value) & SIMPLIFIED_ONLY_FOR_HK)
+    if not found:
+        return []
+    preview = "".join(found[:12])
+    suffix = "…" if len(found) > 12 else ""
+    return [f"香港题库须使用繁体中文，检测到简体字：{preview}{suffix}"]
+
+
+def formula_errors(
+    value: str,
+    *,
+    check_chem: bool = True,
+    check_physics: bool = False,
+) -> list[str]:
     errors: list[str] = []
+    if ANSI_ESCAPE.search(value):
+        errors.append(r"含 ANSI 终端转义码（写文件前设置 NO_COLOR=1）")
+    if UNICODE_MATH.search(value):
+        errors.append(r"含 Unicode 数学符号，须改用 LaTeX 命令")
     if "\\(" in value or "\\)" in value or "\\[" in value or "\\]" in value:
         errors.append(r"用了 \(、\) 或 \[、\]，须改用 $…$ / $$…$$")
     spans, outside, delimiter_errors = _split_math(value)
@@ -193,7 +254,11 @@ def formula_errors(value: str, *, check_chem: bool = True) -> list[str]:
         errors.append("变量或表达式未置于 $...$ 数学定界符内")
     if NAKED_VALUE_WITH_UNIT.search(outside):
         errors.append("带单位数值未置于 $...$ 数学定界符内")
+    if ASCII_PSEUDO_MATH.search(outside):
+        errors.append(r"数学定界符外存在 sqrt(/frac(/cosh( 等 ASCII 伪数学")
     for span in spans:
+        if span.count("{") != span.count("}"):
+            errors.append("数学环境中的花括号不配对")
         if re.search(r"(?<!\\)%", span):
             errors.append(r"数学环境中的 % 未写成 \%")
         if MALFORMED_SUPERSCRIPT.search(span):
@@ -201,7 +266,33 @@ def formula_errors(value: str, *, check_chem: bool = True) -> list[str]:
         if MALFORMED_SUBSCRIPT.search(span):
             errors.append("多字符、带符号或括号下标须写成 _{...}")
         stripped = _without_text_commands(span)
-        if MATH_NAKED_UNIT.search(stripped):
+        if SUBSCRIPT_HYPHEN.search(span):
+            errors.append("下标花括号内含键线短横；短横须写在花括号外")
+        if EXPONENT_GROUPING.search(span):
+            errors.append("指数分组错位（例如 4s^{24}p 应拆为 4s^{2}4p）")
+        if NESTED_ROMAN.search(span):
+            errors.append(r"\mathrm{} 不得嵌套 \mathrm{}")
+        for text_body in re.findall(r"\\text\{((?:[^{}]|\{[^{}]*\})*)\}", span):
+            if "_" in text_body or "^" in text_body:
+                errors.append(r"\text{} 内含 _ 或 ^；化学式/上下标须移到数学命令中")
+                break
+        if MISSING_LATEX_BACKSLASH.search(stripped):
+            errors.append(r"数学环境中的 LaTeX 命令疑似丢失反斜杠")
+        if CJK.search(stripped):
+            errors.append(r"数学环境中的中文须用 \text{...} 包裹")
+        naked_units = list(MATH_NAKED_UNIT.finditer(stripped))
+        # In physics, an adjacent ``mg`` is conventionally the product of mass
+        # and gravitational acceleration (for example ``0.5mg``), not the
+        # milligram unit.  Spaced forms such as ``5 mg`` or ``5\,mg`` remain
+        # invalid units and are still caught.  This avoids rejecting a valid
+        # force expression while keeping the delivery-unit rule deterministic.
+        if check_physics:
+            naked_units = [
+                match
+                for match in naked_units
+                if not (match.group(3) == "mg" and match.group(0) == "mg")
+            ]
+        if naked_units:
             errors.append(r"数学环境中的单位须用 \mathrm{...}")
         if check_chem and CHEM.search(stripped):
             errors.append(r"化学式/元素须包 \mathrm{...}（否则显示成斜体）")
@@ -231,6 +322,33 @@ def option_period_error(options: Sequence[dict[str, Any]]) -> str | None:
     return None
 
 
+def punctuation_errors(prompt: str, options: Sequence[dict[str, Any]]) -> list[str]:
+    errors: list[str] = []
+    stripped = prompt.strip()
+    if re.search(r"[（(]\s*[)）]\s*[。：，]", stripped):
+        errors.append("作答括号（ ）后不应再加句号、冒号或逗号")
+    if re.search(r"：。|。：|。。|？。|！。|，。|：：", prompt):
+        errors.append("题干含异常连续或错配标点")
+    option_count = sum(1 for option in options if str(option.get("text", "")).strip())
+    if option_count >= 2 and not re.search(r"[（(]\s*[)）]\s*$", stripped):
+        if re.search(r"(的是|分別為|分别为|分別是|分别是|包括|有哪些|下列)[^。？：]{0,6}。\s*$", stripped):
+            errors.append("引出型选择题题干句末应使用全角冒号：")
+        elif re.search(r"(嗎|吗|呢|是甚麼|是什么|多少|如何變化|如何变化)[^。？：]{0,4}。\s*$", stripped):
+            errors.append("疑问型选择题题干句末应使用全角问号？")
+    return errors
+
+
+def conclusion_errors(explanation: str, answer: Any, *, locale: str | None) -> list[str]:
+    errors: list[str] = []
+    matches = CONCLUSION_LETTER.findall(explanation or "")
+    if matches and matches[-1] != answer:
+        errors.append(f"解析结论字母 {matches[-1]} 与 answer {answer!r} 不一致")
+    expected = f"故選{answer}。" if locale == "zh-Hant-HK" else f"故选{answer}。"
+    if answer in OPTION_IDS and not explanation.rstrip().endswith(expected):
+        errors.append(f"解析末尾须统一写“{expected}”并与 answer 同步")
+    return errors
+
+
 def _content_fields(question: dict[str, Any]) -> list[tuple[str, str]]:
     fields = [
         ("prompt", str(question.get("prompt", ""))),
@@ -249,7 +367,12 @@ def _content_fields(question: dict[str, Any]) -> list[tuple[str, str]]:
     return fields
 
 
-def check_question(question: dict[str, Any], line_no: int) -> list[str]:
+def check_question(
+    question: dict[str, Any],
+    line_no: int,
+    *,
+    locale: str | None = None,
+) -> list[str]:
     """Return deterministic per-question violations, prefixed with line number."""
     errors: list[str] = []
     if not isinstance(question, dict):
@@ -312,6 +435,7 @@ def check_question(question: dict[str, Any], line_no: int) -> list[str]:
     ]
     if len(repeated) >= 2:
         errors.append("题干重复包含多个 options[].text 的选项内容")
+    errors.extend(punctuation_errors(prompt, valid_options))
 
     explanation = str(question.get("explanation", ""))
     for phrase in (*REPAIR_CHATTER, *INTERNAL_PROCESS_TERMS):
@@ -320,10 +444,25 @@ def check_question(question: dict[str, Any], line_no: int) -> list[str]:
     explanation_math, _, _ = _split_math(explanation)
     if any(not span.strip() or EMPTY_EQUATION.fullmatch(span) for span in explanation_math):
         errors.append("explanation 含空公式或等号右侧为空的失败残留")
+    errors.extend(conclusion_errors(explanation, answer, locale=locale))
 
-    check_chem = question.get("subject") != "物理"
+    check_chem = str(question.get("subject", "")).strip().lower() in {
+        "化学",
+        "化學",
+        "chemistry",
+    }
+    check_physics = str(question.get("subject", "")).strip().lower() in {
+        "物理",
+        "physics",
+    }
     for field_name, value in _content_fields(question):
-        for violation in formula_errors(value, check_chem=check_chem):
+        for violation in formula_errors(
+            value,
+            check_chem=check_chem,
+            check_physics=check_physics,
+        ):
+            errors.append(f"{field_name}：{violation}")
+        for violation in language_errors(value, locale=locale):
             errors.append(f"{field_name}：{violation}")
     return [f"第 {line_no} 行：{error}" for error in sorted(set(errors))]
 
@@ -361,14 +500,28 @@ def _quota_errors(questions: Sequence[dict[str, Any]]) -> list[str]:
             errors.append(f"{difficulty}：display {display} 题，须 ≥3")
         if exam < 2:
             errors.append(f"{difficulty}：exam {exam} 题，须 ≥2")
+    answers = [
+        str(question.get("answer"))
+        for question in questions
+        if question.get("answer") in OPTION_IDS
+    ]
+    if len(answers) >= 5:
+        option, count = Counter(answers).most_common(1)[0]
+        share = count / len(answers)
+        if share > 0.40:
+            errors.append(
+                f"节点内答案偏倚：{option} 占 {count}/{len(answers)}（{share:.0%}），须 ≤40%；"
+                "调整完整选项顺序并同步 answer 与解析结论"
+            )
     return errors
 
 
 def check_node_detailed(path: Path) -> tuple[str, list[str], list[dict[str, Any]]]:
     questions, errors = _read_jsonl(path)
+    locale = language_variant_for_path(path)
     seen: set[str] = set()
     for line_no, question in enumerate(questions, 1):
-        errors.extend(check_question(question, line_no))
+        errors.extend(check_question(question, line_no, locale=locale))
         qid = str(question.get("id", ""))
         if qid in seen:
             errors.append(f"第 {line_no} 行：重复题目 id {qid!r}")
@@ -406,6 +559,21 @@ def question_snapshot_sha256(question: dict[str, Any], key: str) -> str:
         "question_type": "multiple_choice" if options else "open_response",
     }
     return sha256_text(compact_json(snapshot))
+
+
+def final_content_sha256(question: dict[str, Any], key: str) -> str:
+    """Hash the exact final whose answer-free snapshot was independently solved."""
+    return sha256_text(
+        compact_json(
+            {
+                "question_snapshot_sha256": question_snapshot_sha256(question, key),
+                "answer": str(question.get("answer", "")),
+                "explanation_sha256": sha256_text(
+                    str(question.get("explanation", ""))
+                ),
+            }
+        )
+    )
 
 
 def _review_errors(
@@ -457,6 +625,28 @@ def _review_errors(
         errors.append("answer_review 缺 teacher_solution_sha256；请用新版 manager 重新 export")
     elif actual_solution != expected_solution:
         errors.append("questions.explanation 与 Teacher 最终解法哈希不一致")
+    blind = review.get("blind_recheck")
+    if not isinstance(blind, dict):
+        errors.append("缺少剥离答案独立复核证书；请运行新版 manager blind-recheck 后重新 export")
+    else:
+        if blind.get("status") != "pass" or blind.get("matched") is not True:
+            errors.append("blind_recheck 不是 matched pass")
+        if blind.get("question_valid") is not True:
+            errors.append("blind_recheck 未确认题目有效且答案唯一")
+        blind_answer = re.sub(r"\s+", "", str(blind.get("answer", ""))).upper()
+        current_answer = re.sub(r"\s+", "", answer).upper()
+        if not blind_answer or blind_answer != current_answer:
+            errors.append("blind_recheck 独立答案与 questions.answer 不一致")
+        if str(blind.get("question_snapshot_sha256", "")) != expected_snapshot:
+            errors.append("blind_recheck 题面快照与当前 questions.jsonl 不一致")
+        if str(blind.get("final_content_sha256", "")) != final_content_sha256(
+            question, expected_key
+        ):
+            errors.append("blind_recheck 最终内容哈希与当前题面/答案/解析不一致")
+        if not re.fullmatch(r"[0-9a-f]{64}", str(blind.get("response_sha256", ""))):
+            errors.append("blind_recheck 缺少有效 response_sha256")
+        if not str(blind.get("run_id", "")).strip():
+            errors.append("blind_recheck 缺少 run_id")
     return errors
 
 
@@ -536,6 +726,79 @@ def _find_question_files(base: Path) -> list[Path]:
     )
 
 
+def pack_hygiene_errors(root: Path) -> list[str]:
+    """Reject packaging debris known to break recursive ingestion."""
+    errors: list[str] = []
+    if not root.exists():
+        return errors
+    for path in sorted(root.rglob("*")):
+        relative = path.relative_to(root).as_posix()
+        if ".git" in path.parts or ".qb-review" in path.parts:
+            continue
+        if path.name == ".DS_Store" or path.name.startswith("._"):
+            errors.append(f"包卫生：不得包含 {relative}")
+        elif path.is_dir() and path.name == "__MACOSX":
+            errors.append(f"包卫生：不得包含 {relative}/")
+        elif path.is_dir() and " copy" in path.name:
+            errors.append(f"包卫生：目录名不得含 ' copy'：{relative}/")
+    return errors
+
+
+def _manifest_payload(root: Path) -> dict[str, Any]:
+    files: list[dict[str, Any]] = []
+    difficulty_counts: Counter[str] = Counter()
+    pool_counts: Counter[str] = Counter()
+    answer_counts: Counter[str] = Counter()
+    total_questions = 0
+    for question_file in _find_question_files(root):
+        rows, errors = _read_jsonl(question_file)
+        if errors:
+            raise ValueError(
+                f"无法为 manifest 读取 {question_file}: " + "；".join(errors[:3])
+            )
+        total_questions += len(rows)
+        difficulty_counts.update(str(row.get("difficulty") or "unknown") for row in rows)
+        pool_counts.update(str(row.get("pool") or "unknown") for row in rows)
+        answer_counts.update(str(row.get("answer") or "unknown") for row in rows)
+        files.append(
+            {
+                "path": question_file.resolve().relative_to(root.resolve()).as_posix(),
+                "questions": len(rows),
+                "sha256": hashlib.sha256(question_file.read_bytes()).hexdigest(),
+                "bytes": question_file.stat().st_size,
+            }
+        )
+    return {
+        "schema_version": 1,
+        "nodes": len(files),
+        "questions": total_questions,
+        "difficulty_counts": dict(sorted(difficulty_counts.items())),
+        "pool_counts": dict(sorted(pool_counts.items())),
+        "answer_counts": dict(sorted(answer_counts.items())),
+        "files": files,
+    }
+
+
+def manifest_errors(root: Path) -> list[str]:
+    path = root / "manifest.json"
+    if not path.is_file():
+        return ["交付包缺少 manifest.json"]
+    try:
+        actual = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        return [f"manifest.json 无法读取：{exc}"]
+    try:
+        expected = _manifest_payload(root)
+    except ValueError as exc:
+        return [str(exc)]
+    if actual != expected:
+        return [
+            "manifest.json 与当前 questions.jsonl 的路径、题数、sha256、字节数或分布不一致；"
+            "请重新执行 --prepare-delivery"
+        ]
+    return []
+
+
 def _print_results(
     results: Sequence[tuple[Path, str, Sequence[str]]],
     *,
@@ -591,6 +854,13 @@ def validate_scope(
             status = "PASS" if questions and not errors else ("EMPTY" if not questions else "FAIL")
         results.append((question_file, status, errors))
         all_questions.extend(questions)
+    scope_root = base if base.is_dir() else base.parent
+    package_errors = pack_hygiene_errors(scope_root)
+    if delivery:
+        package_errors.extend(manifest_errors(bank_root))
+    if package_errors:
+        path, _, errors = results[0]
+        results[0] = (path, "FAIL", [*errors, *package_errors])
     findings = _distribution_findings(
         all_questions,
         minimum=answer_share_min,
@@ -607,6 +877,10 @@ def validate_scope(
             results[0] = (path, "FAIL", [*errors, *hard])
     elif distribution_policy == "warn":
         warnings.extend(findings)
+    warnings.append(
+        "静态校验全绿不等于答案正确；正式交付前仍须完成 README 第七节的"
+        "剥离答案独立重解，并保留可审查证据"
+    )
     passed, failed, empty = _print_results(results, display_root=bank_root, warnings=warnings)
     return {
         "ok": failed == 0,
@@ -624,6 +898,16 @@ def _write_jsonl(path: Path, rows: Iterable[dict[str, Any]]) -> None:
     text = "".join(compact_json(row) + "\n" for row in rows)
     temporary = path.with_name(path.name + ".tmp")
     temporary.write_text(text, encoding="utf-8")
+    os.replace(temporary, path)
+
+
+def _write_json(path: Path, value: Any) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name(path.name + ".tmp")
+    temporary.write_text(
+        json.dumps(value, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
     os.replace(temporary, path)
 
 
@@ -671,6 +955,7 @@ def prepare_delivery(
             )
         selected_questions: list[dict[str, Any]] = []
         selected_reviews: list[dict[str, Any]] = []
+        locale = language_variant_for_path(question_file)
         for line_no, question in enumerate(questions, 1):
             qid = str(question.get("id", ""))
             matching = reviews_by_id.get(qid, [])
@@ -691,7 +976,7 @@ def prepare_delivery(
                     f"{question_file.parent.name}/{qid}: 未获 Teacher pass + manager final，未交付"
                 )
                 continue
-            per_question_errors = check_question(question, line_no)
+            per_question_errors = check_question(question, line_no, locale=locale)
             key = question_key(question_file, bank_root, qid)
             review_errors = _review_errors(question, review, expected_key=key)
             if per_question_errors or review_errors:
@@ -739,6 +1024,7 @@ def prepare_delivery(
                 if source.is_file():
                     target_node.mkdir(parents=True, exist_ok=True)
                     shutil.copy2(source, target_node / name)
+    _write_json(output / "manifest.json", _manifest_payload(output))
     return {
         "ok": True,
         "output": str(output.resolve()),
@@ -746,7 +1032,7 @@ def prepare_delivery(
         "questions": len(all_selected),
         "excluded": len(exclusions),
         "exclusion_examples": exclusions[:20],
-        "included_files": ["questions.jsonl", "answer_review.jsonl"],
+        "included_files": ["questions.jsonl", "answer_review.jsonl", "manifest.json"],
         "source_assets_included": include_source_assets,
     }
 

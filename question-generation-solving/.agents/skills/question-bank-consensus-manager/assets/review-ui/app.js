@@ -56,14 +56,17 @@ const annotationStatusLabels = {
 
 const retryDispositionLabels = {
   none: "无需重试",
-  retry: "进入兜底重解",
+  retry: "历史自动重解（新流程已停用）",
   question_revision: "建议修订题面",
   human_review: "转人工复核",
 };
 
 const terminalStatuses = new Set(["completed", "failed"]);
 const activeStatuses = new Set(["queued", "running"]);
-const defaultReviewStatuses = "disagreement";
+const defaultReviewStatuses = {
+  seed: "disagreement,invalid,error",
+  candidate: "disagreement",
+};
 const $ = (id) => document.getElementById(id);
 
 function el(tag, className = "", text = "") {
@@ -76,6 +79,24 @@ function el(tag, className = "", text = "") {
 function text(value, fallback = "") {
   if (value === null || value === undefined || value === "") return fallback;
   return String(value);
+}
+
+const mathRenderOptions = Object.freeze({
+  delimiters: [
+    { left: "$$", right: "$$", display: true },
+    { left: "$", right: "$", display: false },
+    { left: "\\[", right: "\\]", display: true },
+    { left: "\\(", right: "\\)", display: false },
+  ],
+  throwOnError: false,
+  trust: false,
+  strict: "warn",
+  ignoredClasses: ["katex", "mono", "enum-code"],
+});
+
+function renderMath(root) {
+  if (!root || typeof window.renderMathInElement !== "function") return;
+  window.renderMathInElement(root, mathRenderOptions);
 }
 
 function asNumber(value, fallback = 0) {
@@ -374,6 +395,7 @@ function renderList() {
     button.addEventListener("click", () => selectQuestion(index));
     root.append(button);
   });
+  renderMath(root);
 }
 
 async function loadQuestions({ keepSelection = true, resetOffset = false, edge = "first" } = {}) {
@@ -465,15 +487,11 @@ function renderDetail() {
     item.append(el("span", "option-id", String(option.id || "")), el("span", "", String(option.text || "")));
     options.append(item);
   });
-  const imageWrap = $("question-image-wrap");
-  if (d.has_image) {
-    imageWrap.classList.remove("hidden");
-    $("question-image").src = `/api/questions/${d.question_key}/image?${Date.now()}`;
-  } else imageWrap.classList.add("hidden");
   renderAnnotations(d);
   renderJob(d.jobs || []);
   renderSolutions(d);
   renderRoundHistory(d);
+  renderMath($("detail"));
 }
 
 function renderJob(jobs) {
@@ -628,10 +646,10 @@ function roundLabel(round, index, rounds, currentRunId) {
   const current = text(round.run_id) === text(currentRunId);
   const fallback = /^postverify/i.test(text(round.run_id));
   const first = index === rounds.length - 1;
-  if (current && fallback) return "当前轮 · 兜底轮";
+  if (current && fallback) return "当前轮 · 历史兜底轮";
   if (current && first) return "当前轮 · 首轮";
   if (current) return "当前轮";
-  if (fallback) return "兜底轮";
+  if (fallback) return "历史兜底轮";
   if (first) return "首轮";
   return "历史重解轮";
 }
@@ -672,7 +690,7 @@ function roundTeacher(round) {
 function renderRetryDiagnostics(round) {
   const retry = round.retry_feedback;
   const section = el("section", "retry-diagnostics");
-  section.append(el("p", "solution-label", "ENUM-ONLY RETRY DIAGNOSTICS"));
+  section.append(el("p", "solution-label", "TEACHER ROUTING DIAGNOSTICS · 不自动重解"));
   if (!retry || typeof retry !== "object") {
     section.append(el("p", "muted", "本轮没有 retry_feedback。"));
     return section;
@@ -1052,6 +1070,7 @@ function renderSkillVerification(detail, version) {
   const details = el("details", "verification-raw");
   details.append(el("summary", "", "查看原始验证记录"), el("pre", "skill-content", displayValue(verification)));
   root.append(details);
+  renderMath(root);
 }
 
 function renderSkillVersionOptions(detail, selected) {
@@ -1179,7 +1198,9 @@ async function setView(view) {
     else document.title = "解题技能库｜题库共识审校台";
   } else {
     const bucketChanged = previousView !== nextView;
-    if (bucketChanged && !state.summary?.review_view?.fixed) $("status-filter").value = defaultReviewStatuses;
+    if (bucketChanged && !state.summary?.review_view?.fixed) {
+      $("status-filter").value = defaultReviewStatuses[nextView];
+    }
     await loadQuestions({ keepSelection: !bucketChanged, resetOffset: bucketChanged });
     document.title = state.detail ? `审校 ${state.detail.id}` : "题库共识审校台";
   }
@@ -1291,6 +1312,10 @@ async function poll() {
 }
 
 (async function init() {
+  if (window.location.protocol === "file:") {
+    $("file-protocol-warning").classList.remove("hidden");
+    return;
+  }
   await loadSummary();
   await loadQuestions({ keepSelection: false });
   setInterval(poll, 2500);

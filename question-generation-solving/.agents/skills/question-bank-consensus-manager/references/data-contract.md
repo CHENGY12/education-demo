@@ -8,7 +8,7 @@
 - `reference.md`：知识点、考查要点和原题文字。
 - `question.png` / `question.jpg`：可选原题图。
 - `answer_final.jsonl`：内部兼容/审计输出，每行 `{id, answer, solution}`；不进入交付包。
-- `answer_review.jsonl`：Teacher 的派生审查记录，可从状态库重建；交付记录包含 `question_snapshot_sha256` 与 `teacher_solution_sha256`，用于证明复核题面、最终答案和 `questions.explanation` 没有漂移。
+- `answer_review.jsonl`：Teacher 的派生审查记录，可从状态库重建；交付记录包含 `question_snapshot_sha256`、`teacher_solution_sha256` 与 `blind_recheck`。盲解证书以 `final_content_sha256` 绑定当前题面快照、答案和解析哈希，并保留独立响应 SHA-256/run id。
 
 根目录输出：
 
@@ -20,6 +20,9 @@
 - `.qb-review/solution-skill-events.jsonl`：skill 创建、去重跳过、激活、拒绝事件。
 - `解题技能库/<skill-id>/SKILL.md`：当前激活的共享 skill；只能由版本化写入器生成。
 - `错题集.jsonl`：由当前未解决记录原子重建的兼容导出。
+- `review-queue/unresolved.jsonl`：与错题集同源的 Git 可移植审查队列。每条保存题面、状态、三份当前 attempt、Teacher review 与 staged annotation；`scan`/`serve` 在全新状态库中自动恢复，不能作为最终题库摄入。
+
+每题的净化请求还含由 `node_dir` 确定的 `language_variant`。`hk-*`/`hongkong` 节点为 `zh-Hant-HK`，所有自然语言字段使用香港繁体；其他当前大陆节点为 `zh-Hans-CN`。该字段进入请求 artifact 及其哈希，但不改变原业务 JSONL schema，也不改变用于交付兼容的题面内容哈希。
 
 ## 内部标识
 
@@ -29,7 +32,9 @@
 
 `pending -> running -> final | disagreement | invalid | error`
 
-重解不会覆盖旧 attempt；它创建新的 run id。自动后核验兜底也必须是新的 child run，且最多一轮。人工接受任一候选后进入 `final`，同时保留全部旧 review。对已有 `answer_final.jsonl` 的题，扫描时会兼容导入为 final，但 `verify` 与交付 validator 仍要求它和权威 `questions.jsonl` 完全一致；旧产物不因被导入就自动获得新交付证书。
+用户从网页主动重解不会覆盖旧 attempt；它创建新的 run id。默认流程没有自动后核验兜底：已有题首轮不一致直接等待人工审查；生成题首轮失败不写入源文件，下一次扩题根据仍存在的配额缺口生成不同候选，并把旧失败题面列为禁重复项。历史版本留下的 `postverify` child run 只读兼容，不会被新流程创建。种子题进入 `disagreement`、`invalid` 或 `error` 时一律保留为人工审查义务，默认显示在“待审查”；它可以为保持干净交付而暂不出现在权威 `questions.jsonl`，但绝不能从 portable review queue 消失。人工接受任一候选后进入 `final`，通过逐题 validator 后把被隔离的 seed 原子追加回 `questions.jsonl`，同时保留全部旧 review。对已有 `answer_final.jsonl` 的题，扫描时会兼容导入为 final，但 `verify` 与交付 validator 仍要求它和权威 `questions.jsonl` 完全一致；旧产物不因被导入就自动获得新交付证书。
+
+Portable queue 导入必须按 `relative questions.jsonl path + NUL + id` 重算并核对 `question_key`，拒绝路径穿越、重复 key、题面与当前源文件漂移及非未解决状态。重复扫描使用 `INSERT OR IGNORE` 恢复 attempt/review/annotation，不制造第二份证据；数据库中已为 `final` 的题永不被旧 queue 降级。
 
 ## 交付契约
 
@@ -38,7 +43,9 @@
 - 必需：`questions.jsonl`、`answer_review.jsonl`；
 - 可选：`question.png/jpg/jpeg`、`reference.md`。
 
-不得包含 `answer_final.jsonl`、`answers1.jsonl`、`answers2.jsonl`、`answers3.jsonl`、`.qb-review` 或原始 Agent invocation。进入交付的每道题必须恰有一条 review，且 `teacher_verdict=pass`、`correct=true`、`answer_consistent=true`、`manager_status=final`、`auto_promote=true`，三名 solver 答案与 Teacher 相同、题面快照哈希相同、`questions.answer` 与 `teacher_answer` 相同、`questions.explanation` 与 Teacher 解法哈希相同。非 pass/final 题直接排除；标成 pass 却哈希或答案冲突时整批失败。
+交付包根目录必须另含 `manifest.json`，逐个记录 `questions.jsonl` 的相对路径、题数、SHA-256 和字节数，并汇总节点数、题数、难度、池和答案分布。validator 会复算整份清单；包内不得出现 `._*`、`.DS_Store`、`__MACOSX/` 或名称含 ` copy` 的目录。
+
+不得包含 `answer_final.jsonl`、`answers1.jsonl`、`answers2.jsonl`、`answers3.jsonl`、`.qb-review` 或原始 Agent invocation。进入交付的每道题必须恰有一条 review，且 `teacher_verdict=pass`、`correct=true`、`answer_consistent=true`、`manager_status=final`、`auto_promote=true`，三名 solver 答案与 Teacher 相同、题面快照哈希相同、`questions.answer` 与 `teacher_answer` 相同、`questions.explanation` 与 Teacher 解法哈希相同；还必须有 `blind_recheck.status=pass`、`matched=true`、独立答案一致且题面/最终内容哈希匹配的当前证书。非 pass/final 或无当前盲解证书的题直接排除；标成 pass 却哈希或答案冲突时整批失败。
 
 逐题静态契约还拒绝控制字符、数学环境外的 LaTeX/上下标、公式内裸 `%`、裸单位、题干重复选项、单字母选项、Markdown 表格选项、空公式、生成修补对话及内部审校用语。整批按科目检查 A/B/C/D 分布；修正分布只能交换完整选项并重新核验，不能孤立修改答案字母。
 
@@ -64,7 +71,7 @@
 
 每题至少包含 `verdict`、`answer_consistent`、`teacher_answer`、`teacher_solution`、`process_review`、逐 Agent 反馈、`retry_feedback`、`question_annotation`、可空 `skill_candidate` 和 `auto_promote`。`auto_promote` 是严格合取条件，不是多数票。
 
-`retry_feedback` 只有 `disposition`、固定 enum 的 `issue_codes` 与 `focus_codes`。Manager 按固定常量顺序规范化后才发送给下一轮；下一轮 request 禁止包含 Teacher 答案、解法、候选或 Agent 身份。`question_annotation.proposed_revision` 是 staged 数据，不会静默改写已 final 的原题。
+`retry_feedback` 是为兼容现有审计/UI 保留的结构化路由诊断，只有 `disposition`、固定 enum 的 `issue_codes` 与 `focus_codes`；新流程不会把它发送给 solver，也不会据此自动启动第二轮。通过题必须为 `none`，不一致题使用 `human_review`，题面需改使用 `question_revision`。`question_annotation.proposed_revision` 是 staged 数据，不会静默改写已 final 的原题。
 
 ## Solution skill 版本
 
