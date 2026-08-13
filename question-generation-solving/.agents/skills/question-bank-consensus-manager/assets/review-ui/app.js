@@ -63,7 +63,10 @@ const retryDispositionLabels = {
 
 const terminalStatuses = new Set(["completed", "failed"]);
 const activeStatuses = new Set(["queued", "running"]);
-const defaultReviewStatuses = "disagreement";
+const defaultReviewStatuses = {
+  seed: "disagreement,invalid,error",
+  candidate: "disagreement",
+};
 const $ = (id) => document.getElementById(id);
 
 function el(tag, className = "", text = "") {
@@ -1179,7 +1182,9 @@ async function setView(view) {
     else document.title = "解题技能库｜题库共识审校台";
   } else {
     const bucketChanged = previousView !== nextView;
-    if (bucketChanged && !state.summary?.review_view?.fixed) $("status-filter").value = defaultReviewStatuses;
+    if (bucketChanged && !state.summary?.review_view?.fixed) {
+      $("status-filter").value = defaultReviewStatuses[nextView];
+    }
     await loadQuestions({ keepSelection: !bucketChanged, resetOffset: bucketChanged });
     document.title = state.detail ? `审校 ${state.detail.id}` : "题库共识审校台";
   }

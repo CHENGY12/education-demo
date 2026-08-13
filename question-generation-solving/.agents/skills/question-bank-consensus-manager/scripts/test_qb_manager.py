@@ -1492,6 +1492,155 @@ class ManagerTests(unittest.TestCase):
         self.assertEqual([item["id"] for item in seed["items"]], ["pb_物理_node-1_seed_001"])
         self.assertEqual([item["id"] for item in candidate["items"]], ["pb_物理_node-1_gen_001"])
 
+    def test_portable_review_queue_restores_and_resolves_excluded_seed(self) -> None:
+        seed_id = "pb_物理_node-1_seed_001"
+        generated_id = "pb_物理_node-1_gen_001"
+        qb.atomic_write_jsonl(
+            self.node / "questions.jsonl",
+            [question(seed_id), question(generated_id)],
+        )
+        qb.scan_bank(self.state)
+        pipeline = qb.Pipeline(self.state, model=None, max_agent_processes=3)
+        pipeline.runner = FakeRunner(disagree=True)
+        run_id = qb.new_run_id("portable-queue")
+        run_dir = pipeline.create_manifest(run_id, "test", {"fixture": True})
+        counts = pipeline.audit_rows(self.rows(), run_id=run_id, run_dir=run_dir)
+        self.assertEqual(counts["disagreement"], 2)
+        exported = qb.export_unresolved(self.state)
+        self.assertEqual(exported["portable_review_queue"], 2)
+
+        queue_path = qb.portable_review_queue_path(self.state)
+        queue_rows, queue_errors = qb.read_jsonl(queue_path)
+        self.assertFalse(queue_errors)
+        self.assertEqual({item["id"] for item in queue_rows}, {seed_id, generated_id})
+        self.assertTrue(all(item["review_queue_schema_version"] == 1 for item in queue_rows))
+
+        # Simulate a clean Git checkout: disputed rows are absent from the
+        # authoritative source and the local SQLite state is new.
+        qb.atomic_write_jsonl(self.node / "questions.jsonl", [])
+        fresh = qb.State(self.bank, self.bank / ".fresh-review")
+        fresh.ensure()
+        report = qb.scan_bank(fresh)
+        self.assertFalse(report["errors"], report["errors"])
+        self.assertEqual(report["portable_review_queue"]["records_seen"], 2)
+        with fresh.connect() as conn:
+            restored = list(conn.execute("SELECT * FROM questions ORDER BY qid"))
+            attempt_count = conn.execute("SELECT COUNT(*) FROM attempts").fetchone()[0]
+            review_count = conn.execute("SELECT COUNT(*) FROM reviews").fetchone()[0]
+        self.assertEqual(len(restored), 2)
+        self.assertEqual(attempt_count, 6)
+        self.assertEqual(review_count, 2)
+        by_id = {row["qid"]: row for row in restored}
+        self.assertEqual(by_id[seed_id]["source_kind"], "seed_review")
+        self.assertEqual(by_id[generated_id]["source_kind"], "generated")
+
+        # Repeated scans are idempotent and do not duplicate evidence.
+        qb.scan_bank(fresh)
+        with fresh.connect() as conn:
+            self.assertEqual(conn.execute("SELECT COUNT(*) FROM attempts").fetchone()[0], 6)
+            self.assertEqual(conn.execute("SELECT COUNT(*) FROM reviews").fetchone()[0], 2)
+
+        seed_page = qb.list_questions(
+            fresh,
+            statuses=["disagreement", "invalid", "error"],
+            subject="",
+            query="",
+            limit=100,
+            offset=0,
+            review_bucket="seed",
+        )
+        self.assertEqual([item["id"] for item in seed_page["items"]], [seed_id])
+        seed_key = seed_page["items"][0]["question_key"]
+        detail = qb.question_detail(fresh, seed_key)
+        self.assertEqual(len(detail["attempts"]), 3)
+        self.assertIsNotNone(detail["review"])
+        qb.accept_review_choice(
+            fresh,
+            seed_key,
+            source="solver1",
+            requested_run_id=detail["current_run_id"],
+        )
+        qb.export_unresolved(fresh)
+        source_rows, source_errors = qb.read_jsonl(self.node / "questions.jsonl")
+        self.assertFalse(source_errors)
+        self.assertEqual([item["id"] for item in source_rows], [seed_id])
+        remaining, remaining_errors = qb.read_jsonl(queue_path)
+        self.assertFalse(remaining_errors)
+        self.assertEqual([item["id"] for item in remaining], [generated_id])
+
+    def test_stale_portable_queue_never_demotes_a_final_seed(self) -> None:
+        seed_id = "pb_物理_node-1_seed_001"
+        qb.atomic_write_jsonl(self.node / "questions.jsonl", [question(seed_id)])
+        qb.scan_bank(self.state)
+        row = self.rows()[0]
+        qb.accept_final(
+            self.state,
+            row["question_key"],
+            run_id="accepted-run",
+            source="human_accept:custom",
+            answer="B",
+            solution="由速度定义计算并代回检查，故选B。",
+        )
+        stale_record = {
+            "review_queue_schema_version": 1,
+            "question_key": row["question_key"],
+            "id": seed_id,
+            "node_dir": row["node_dir"],
+            "question_file": row["question_file"],
+            "subject": row["subject"],
+            "source_kind": "seed_review",
+            "status": "invalid",
+            "question": question(seed_id),
+            "attempts": [],
+            "teacher_review": None,
+            "updated_at": qb.utc_now(),
+        }
+        qb.atomic_write_jsonl(qb.portable_review_queue_path(self.state), [stale_record])
+        fresh = qb.State(self.bank, self.bank / ".fresh-final-state")
+        fresh.ensure()
+        report = qb.scan_bank(fresh)
+        self.assertFalse(report["errors"], report["errors"])
+        restored = qb.get_question_row(fresh, row["question_key"])
+        self.assertEqual(restored["status"], "final")
+        self.assertEqual(report["portable_review_queue"]["resolved_records_skipped"], 1)
+
+    def test_scoped_export_preserves_unscanned_portable_records(self) -> None:
+        outside_node = self.bank / "other-school" / "物理" / "node-2"
+        outside_node.mkdir(parents=True)
+        outside_question = question("pb_物理_node-2_seed_001")
+        outside_question["nodeId"] = "node-2"
+        qb.atomic_write_jsonl(outside_node / "questions.jsonl", [])
+        outside_file = qb.safe_rel(outside_node / "questions.jsonl", self.bank)
+        outside_key = qb.question_key(outside_file, outside_question["id"])
+        portable = {
+            "review_queue_schema_version": 1,
+            "question_key": outside_key,
+            "id": outside_question["id"],
+            "node_dir": qb.safe_rel(outside_node, self.bank),
+            "question_file": outside_file,
+            "subject": "物理",
+            "source_kind": "seed_review",
+            "status": "invalid",
+            "question": outside_question,
+            "attempts": [],
+            "teacher_review": None,
+            "updated_at": qb.utc_now(),
+        }
+        qb.atomic_write_jsonl(qb.portable_review_queue_path(self.state), [portable])
+        qb.scan_bank(self.state, "school/物理/node-1")
+        result = qb.export_unresolved(self.state)
+        self.assertEqual(result["portable_review_queue"], 1)
+        remaining, errors = qb.read_jsonl(qb.portable_review_queue_path(self.state))
+        self.assertFalse(errors)
+        self.assertEqual([item["question_key"] for item in remaining], [outside_key])
+
+    def test_review_ui_defaults_seed_queue_to_all_human_review_statuses(self) -> None:
+        app = (qb.ASSET_ROOT / "app.js").read_text(encoding="utf-8")
+        html = (qb.ASSET_ROOT / "index.html").read_text(encoding="utf-8")
+        self.assertIn('seed: "disagreement,invalid,error"', app)
+        self.assertIn('candidate: "disagreement"', app)
+        self.assertIn('value="disagreement,invalid,error">待人工审查（默认）', html)
+
     def test_solution_skill_versioning_dedup_and_user_guided_revision(self) -> None:
         event = qb.record_solution_skill(
             self.state,

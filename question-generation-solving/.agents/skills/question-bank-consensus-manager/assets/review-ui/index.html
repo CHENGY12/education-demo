@@ -37,7 +37,8 @@
           <label>
             <span>状态</span>
             <select id="status-filter">
-              <option value="disagreement">不一致（默认）</option>
+              <option value="disagreement,invalid,error">待人工审查（默认）</option>
+              <option value="disagreement">仅不一致</option>
               <option value="invalid">题目无效</option>
               <option value="error">运行错误</option>
               <option value="running">解题中</option>

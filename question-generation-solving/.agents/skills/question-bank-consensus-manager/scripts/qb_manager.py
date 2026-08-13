@@ -50,6 +50,9 @@ REFERENCE_ROOT = SKILL_ROOT / "references"
 SCRIPT_ROOT = SKILL_ROOT / "scripts"
 STATE_DIRNAME = ".qb-review"
 SOLUTION_SKILLS_DIRNAME = "解题技能库"
+REVIEW_QUEUE_DIRNAME = "review-queue"
+REVIEW_QUEUE_FILENAME = "unresolved.jsonl"
+REVIEW_QUEUE_SCHEMA_VERSION = 1
 SCHEMA_VERSION = "3"
 STATUSES = ("pending", "running", "final", "disagreement", "invalid", "error")
 UNRESOLVED_STATUSES = ("disagreement", "invalid", "error")
@@ -222,6 +225,14 @@ def safe_rel(path: Path, root: Path) -> str:
 
 def question_key(question_file_rel: str, qid: str) -> str:
     return sha256_text(f"{question_file_rel}\0{qid}")
+
+
+def is_seed_question_id(qid: str) -> bool:
+    return "_seed_" in str(qid).lower()
+
+
+def portable_review_queue_path(state: "State") -> Path:
+    return state.bank / REVIEW_QUEUE_DIRNAME / REVIEW_QUEUE_FILENAME
 
 
 def safe_component(value: str, max_len: int = 48) -> str:
@@ -781,6 +792,284 @@ def import_legacy_node(state: State, qfile: Path, keys_by_id: dict[str, str]) ->
     return imported
 
 
+def import_portable_review_queue(
+    state: State,
+    question_files: Sequence[Path],
+    *,
+    subject: str | None = None,
+) -> dict[str, Any]:
+    """Restore unresolved review evidence that is intentionally kept out of delivery.
+
+    ``.qb-review`` is local runtime state and is not shipped in a clean Git clone.
+    The portable queue keeps unresolved seed questions reviewable without putting
+    invalid or disputed questions back into authoritative ``questions.jsonl``.
+    Generated failures use the same evidence format, but remain replacement
+    candidates rather than source questions.
+    """
+    queue_path = portable_review_queue_path(state)
+    records, errors = read_jsonl(queue_path)
+    report: dict[str, Any] = {
+        "path": safe_rel(queue_path, state.bank),
+        "records_seen": len(records),
+        "questions_imported": 0,
+        "attempts_imported": 0,
+        "reviews_imported": 0,
+        "annotations_imported": 0,
+        "resolved_records_skipped": 0,
+        "errors": list(errors),
+    }
+    if not records:
+        return report
+
+    allowed_files = {safe_rel(path, state.bank): path for path in question_files}
+    source_by_file: dict[str, dict[str, dict[str, Any]]] = {}
+    for question_file_rel, question_file in allowed_files.items():
+        source_rows, source_errors = read_jsonl(question_file)
+        report["errors"].extend(source_errors)
+        indexed: dict[str, dict[str, Any]] = {}
+        for source_row in source_rows:
+            source_id = str(source_row.get("id", "")).strip()
+            if source_id and source_id not in indexed:
+                indexed[source_id] = source_row
+        source_by_file[question_file_rel] = indexed
+
+    seen_keys: set[str] = set()
+    with state.connect() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        for line_no, record in enumerate(records, 1):
+            prefix = f"{queue_path}:{line_no}"
+            status = str(record.get("status", ""))
+            if status not in UNRESOLVED_STATUSES:
+                report["errors"].append(
+                    f"{prefix}: status 必须是 {','.join(UNRESOLVED_STATUSES)}"
+                )
+                continue
+            qid = str(record.get("id", "")).strip()
+            raw_node_dir = str(record.get("node_dir", "")).strip().replace("\\", "/")
+            question = record.get("question")
+            if not qid or not raw_node_dir or not isinstance(question, dict):
+                report["errors"].append(f"{prefix}: 缺少 id/node_dir/question")
+                continue
+            if str(question.get("id", "")).strip() != qid:
+                report["errors"].append(f"{prefix}: question.id 与记录 id 不一致")
+                continue
+            if Path(raw_node_dir).is_absolute():
+                report["errors"].append(f"{prefix}: node_dir 不得是绝对路径")
+                continue
+            try:
+                canonical_node_dir = safe_rel(state.bank / raw_node_dir, state.bank)
+            except ManagerError as exc:
+                report["errors"].append(f"{prefix}: {exc}")
+                continue
+            if canonical_node_dir != raw_node_dir.strip("/"):
+                report["errors"].append(f"{prefix}: node_dir 含非规范路径片段")
+                continue
+            question_file_rel = f"{canonical_node_dir}/questions.jsonl"
+            declared_question_file = str(record.get("question_file", "")).strip()
+            if declared_question_file and declared_question_file != question_file_rel:
+                report["errors"].append(f"{prefix}: question_file 与 node_dir 不一致")
+                continue
+            if question_file_rel not in allowed_files:
+                continue
+            item_subject = str(
+                record.get("subject") or question.get("subject") or ""
+            ).strip()
+            if subject and item_subject != subject:
+                continue
+            key = question_key(question_file_rel, qid)
+            if str(record.get("question_key", "")) != key:
+                report["errors"].append(f"{prefix}: question_key 与路径/id 哈希不一致")
+                continue
+            if key in seen_keys:
+                report["errors"].append(f"{prefix}: review queue 重复 question_key")
+                continue
+            seen_keys.add(key)
+
+            current = conn.execute(
+                "SELECT * FROM questions WHERE question_key=?", (key,)
+            ).fetchone()
+            if current is not None and str(current["status"]) == "final":
+                report["resolved_records_skipped"] += 1
+                continue
+            source_question = source_by_file.get(question_file_rel, {}).get(qid)
+            if (
+                source_question is not None
+                and compact_json(source_question) != compact_json(question)
+            ):
+                report["errors"].append(
+                    f"{prefix}: portable 题面与当前 questions.jsonl 不一致，已跳过旧记录"
+                )
+                continue
+            canonical_question = source_question or question
+            if source_question is not None:
+                source_kind = str(current["source_kind"]) if current is not None else "existing"
+            else:
+                source_kind = "seed_review" if is_seed_question_id(qid) else "generated"
+            attempts = record.get("attempts")
+            attempt_rows = attempts if isinstance(attempts, list) else []
+            teacher_review = record.get("teacher_review")
+            review = teacher_review if isinstance(teacher_review, dict) else None
+            run_id = str((review or {}).get("run_id", "")).strip()
+            if not run_id:
+                run_id = next(
+                    (
+                        str(item.get("run_id", "")).strip()
+                        for item in attempt_rows
+                        if isinstance(item, dict) and str(item.get("run_id", "")).strip()
+                    ),
+                    f"portable-{key[:16]}",
+                )
+            updated_at = str(record.get("updated_at") or utc_now())
+            teacher_answer = str((review or {}).get("teacher_answer", ""))
+            teacher_solution = str((review or {}).get("teacher_solution", ""))
+            teacher_verdict = str((review or {}).get("verdict") or status)
+
+            if current is None:
+                conn.execute(
+                    """
+                    INSERT INTO questions(
+                        question_key,qid,node_dir,question_file,subject,question_json,
+                        source_kind,status,current_run_id,teacher_answer,teacher_solution,
+                        teacher_verdict,updated_at
+                    ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)
+                    """,
+                    (
+                        key,
+                        qid,
+                        canonical_node_dir,
+                        question_file_rel,
+                        item_subject,
+                        compact_json(canonical_question),
+                        source_kind,
+                        status,
+                        run_id,
+                        teacher_answer,
+                        teacher_solution,
+                        teacher_verdict,
+                        updated_at,
+                    ),
+                )
+            else:
+                conn.execute(
+                    """
+                    UPDATE questions SET qid=?,node_dir=?,question_file=?,subject=?,
+                        question_json=?,source_kind=?,status=?,current_run_id=?,
+                        teacher_answer=?,teacher_solution=?,teacher_verdict=?,updated_at=?
+                    WHERE question_key=? AND status!='final'
+                    """,
+                    (
+                        qid,
+                        canonical_node_dir,
+                        question_file_rel,
+                        item_subject,
+                        compact_json(canonical_question),
+                        source_kind,
+                        status,
+                        run_id,
+                        teacher_answer,
+                        teacher_solution,
+                        teacher_verdict,
+                        updated_at,
+                        key,
+                    ),
+                )
+            report["questions_imported"] += 1
+
+            for attempt in attempt_rows:
+                if not isinstance(attempt, dict):
+                    report["errors"].append(f"{prefix}: attempt 必须是 object")
+                    continue
+                attempt_run_id = str(attempt.get("run_id") or run_id).strip()
+                agent_id = str(attempt.get("agent_id", "")).strip()
+                if not attempt_run_id or not agent_id:
+                    report["errors"].append(f"{prefix}: attempt 缺 run_id/agent_id")
+                    continue
+                raw_attempt = compact_json(attempt)
+                cursor = conn.execute(
+                    """
+                    INSERT OR IGNORE INTO attempts(
+                        question_key,run_id,agent_id,answer,solution,independent_check,
+                        question_valid,confidence,raw_json,invocation_dir,prompt_sha256,
+                        response_sha256,created_at
+                    ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)
+                    """,
+                    (
+                        key,
+                        attempt_run_id,
+                        agent_id,
+                        str(attempt.get("answer", "")),
+                        str(attempt.get("solution", "")),
+                        str(attempt.get("independent_check", "")),
+                        int(bool(attempt.get("question_valid"))),
+                        str(attempt.get("confidence", "")),
+                        raw_attempt,
+                        safe_rel(queue_path, state.bank),
+                        "portable-review-queue",
+                        sha256_text(raw_attempt),
+                        str(attempt.get("created_at") or updated_at),
+                    ),
+                )
+                report["attempts_imported"] += int(cursor.rowcount == 1)
+
+            if review is not None:
+                raw_review = compact_json(review)
+                cursor = conn.execute(
+                    """
+                    INSERT OR IGNORE INTO reviews(
+                        question_key,run_id,verdict,answer_consistent,teacher_answer,
+                        teacher_solution,process_review,agent_feedback_json,auto_promote,
+                        raw_json,invocation_dir,prompt_sha256,response_sha256,created_at
+                    ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                    """,
+                    (
+                        key,
+                        run_id,
+                        str(review.get("verdict") or status),
+                        int(bool(review.get("answer_consistent"))),
+                        str(review.get("teacher_answer", "")),
+                        str(review.get("teacher_solution", "")),
+                        str(review.get("process_review", "")),
+                        compact_json(review.get("agent_feedback") or []),
+                        int(bool(review.get("auto_promote"))),
+                        raw_review,
+                        safe_rel(queue_path, state.bank),
+                        "portable-review-queue",
+                        sha256_text(raw_review),
+                        str(review.get("created_at") or updated_at),
+                    ),
+                )
+                report["reviews_imported"] += int(cursor.rowcount == 1)
+                annotation = review.get("question_annotation")
+                if isinstance(annotation, dict):
+                    annotation_id = sha256_text(
+                        f"portable-review-queue\0{key}\0{run_id}"
+                    )
+                    validity = str(annotation.get("validity") or "unreviewed")
+                    if validity not in {"valid", "invalid", "uncertain", "unreviewed"}:
+                        validity = "unreviewed"
+                    cursor = conn.execute(
+                        """
+                        INSERT OR IGNORE INTO question_annotations(
+                            annotation_id,question_key,run_id,status,issue_codes_json,
+                            summary,proposed_revision_json,created_at
+                        ) VALUES(?,?,?,?,?,?,?,?)
+                        """,
+                        (
+                            annotation_id,
+                            key,
+                            run_id,
+                            validity,
+                            compact_json(annotation.get("annotation_codes") or []),
+                            str(annotation.get("summary", "")),
+                            compact_json(annotation.get("proposed_revision")),
+                            str(review.get("created_at") or updated_at),
+                        ),
+                    )
+                    report["annotations_imported"] += int(cursor.rowcount == 1)
+        conn.execute("COMMIT")
+    return report
+
+
 def scan_bank(state: State, scope: ScopeValue = None, subject: str | None = None) -> dict[str, Any]:
     state.ensure()
     files = resolve_scope(state.bank, scope)
@@ -819,6 +1108,8 @@ def scan_bank(state: State, scope: ScopeValue = None, subject: str | None = None
             nodes += 1
             questions += accepted_rows
             legacy += import_legacy_node(state, qfile, keys_by_id)
+    portable_queue = import_portable_review_queue(state, files, subject=subject)
+    errors.extend(portable_queue["errors"])
     with state.connect() as conn:
         by_status = {row["status"]: row["n"] for row in conn.execute(
             "SELECT status,COUNT(*) AS n FROM questions GROUP BY status"
@@ -828,6 +1119,9 @@ def scan_bank(state: State, scope: ScopeValue = None, subject: str | None = None
         "nodes": nodes,
         "questions": questions,
         "legacy_attempts_seen": legacy,
+        "portable_review_queue": {
+            key: value for key, value in portable_queue.items() if key != "errors"
+        },
         "errors": errors,
         "status": by_status,
     }
@@ -1001,7 +1295,8 @@ def write_final_question_to_source(
     matching = [index for index, item in enumerate(existing) if str(item.get("id", "")) == qid]
     if len(matching) > 1:
         raise ManagerError(f"源 questions.jsonl 中 id={qid!r} 出现多次，拒绝写回")
-    if not matching and row["source_kind"] != "generated":
+    appendable_source_kinds = {"generated", "seed_review"}
+    if not matching and str(row["source_kind"]) not in appendable_source_kinds:
         raise ManagerError(f"源 questions.jsonl 中找不到现有题 id={qid!r}，拒绝写回")
     if matching:
         indexed_question = json.loads(row["question_json"])
@@ -5079,9 +5374,10 @@ def expansion_quota_eligible_ids(
     """Return source ids that may satisfy a future delivery quota.
 
     Pending/running rows still count during the initial expand-before-audit
-    pass.  Once a source seed is known to be disagreement/invalid/error it
-    remains in the working bank for audit, but no longer occupies a delivery
-    quota slot; a later expand can therefore generate a clean replacement.
+    pass. Once a source seed is known to be disagreement/invalid/error it stays
+    preserved for human audit (in source or the portable review queue), but no
+    longer occupies a delivery quota slot; a later expand can therefore
+    generate a clean replacement without discarding the seed review obligation.
     """
     qfile_rel = safe_rel(question_file, state.bank)
     keys = {
@@ -5381,6 +5677,7 @@ def question_detail(state: State, key: str) -> dict[str, Any]:
         "question_key": key,
         "id": row["qid"],
         "node_dir": row["node_dir"],
+        "question_file": row["question_file"],
         "subject": row["subject"],
         "source_kind": row["source_kind"],
         "status": row["status"],
@@ -5787,7 +6084,7 @@ def export_unresolved(state: State) -> dict[str, int]:
                 UNRESOLVED_STATUSES,
             )
         )
-    unresolved: list[dict[str, Any]] = []
+    fresh_unresolved: list[dict[str, Any]] = []
     reviews_by_node: dict[str, list[dict[str, Any]]] = {}
     authoritative_ids_by_node: dict[str, set[str]] = {}
     question_files = resolve_scope(state.bank, None)
@@ -5801,12 +6098,15 @@ def export_unresolved(state: State) -> dict[str, int]:
         }
     for item in rows:
         detail = question_detail(state, item["question_key"])
-        unresolved.append(
+        fresh_unresolved.append(
             {
+                "review_queue_schema_version": REVIEW_QUEUE_SCHEMA_VERSION,
                 "question_key": detail["question_key"],
                 "id": detail["id"],
                 "node_dir": detail["node_dir"],
+                "question_file": detail["question_file"],
                 "subject": detail["subject"],
+                "source_kind": detail["source_kind"],
                 "status": detail["status"],
                 "question": detail["question"],
                 "attempts": detail["attempts"],
@@ -5814,7 +6114,46 @@ def export_unresolved(state: State) -> dict[str, int]:
                 "updated_at": detail["updated_at"],
             }
         )
+    # A scoped server may have indexed only one cohort. Preserve portable rows
+    # whose keys are absent from this SQLite state; otherwise accepting one
+    # Shanghai seed could silently erase an unscanned Hong Kong review queue.
+    queue_path = portable_review_queue_path(state)
+    previous_queue, queue_errors = read_jsonl(queue_path)
+    if queue_errors:
+        raise ManagerError("portable review queue 损坏，拒绝覆盖: " + queue_errors[0])
+    with state.connect() as conn:
+        known_status = {
+            str(row["question_key"]): str(row["status"])
+            for row in conn.execute("SELECT question_key,status FROM questions")
+        }
+    merged_by_key = {
+        str(item["question_key"]): item for item in fresh_unresolved
+    }
+    previous_keys: set[str] = set()
+    for previous in previous_queue:
+        key = str(previous.get("question_key", "")).strip()
+        if not key:
+            raise ManagerError("portable review queue 含缺少 question_key 的记录")
+        if key in previous_keys:
+            raise ManagerError(f"portable review queue 重复 question_key: {key}")
+        previous_keys.add(key)
+        if key in merged_by_key or known_status.get(key) == "final":
+            continue
+        preserved = dict(previous)
+        preserved.setdefault("review_queue_schema_version", REVIEW_QUEUE_SCHEMA_VERSION)
+        node_dir = str(preserved.get("node_dir", ""))
+        preserved.setdefault("question_file", f"{node_dir}/questions.jsonl")
+        preserved.setdefault(
+            "source_kind",
+            "seed_review" if is_seed_question_id(str(preserved.get("id", ""))) else "generated",
+        )
+        merged_by_key[key] = preserved
+    unresolved = sorted(
+        merged_by_key.values(),
+        key=lambda item: (str(item.get("node_dir", "")), str(item.get("id", ""))),
+    )
     atomic_write_jsonl(state.bank / "错题集.jsonl", unresolved)
+    atomic_write_jsonl(queue_path, unresolved)
     with state.connect() as conn:
         reviewed_keys = [row["question_key"] for row in conn.execute(
             "SELECT DISTINCT question_key FROM reviews"
@@ -5877,6 +6216,7 @@ def export_unresolved(state: State) -> dict[str, int]:
         )
     return {
         "unresolved": len(unresolved),
+        "portable_review_queue": len(unresolved),
         "review_files": len(authoritative_ids_by_node),
     }
 

@@ -20,6 +20,7 @@
 - `.qb-review/solution-skill-events.jsonl`：skill 创建、去重跳过、激活、拒绝事件。
 - `解题技能库/<skill-id>/SKILL.md`：当前激活的共享 skill；只能由版本化写入器生成。
 - `错题集.jsonl`：由当前未解决记录原子重建的兼容导出。
+- `review-queue/unresolved.jsonl`：与错题集同源的 Git 可移植审查队列。每条保存题面、状态、三份当前 attempt、Teacher review 与 staged annotation；`scan`/`serve` 在全新状态库中自动恢复，不能作为最终题库摄入。
 
 每题的净化请求还含由 `node_dir` 确定的 `language_variant`。`hk-*`/`hongkong` 节点为 `zh-Hant-HK`，所有自然语言字段使用香港繁体；其他当前大陆节点为 `zh-Hans-CN`。该字段进入请求 artifact 及其哈希，但不改变原业务 JSONL schema，也不改变用于交付兼容的题面内容哈希。
 
@@ -31,7 +32,9 @@
 
 `pending -> running -> final | disagreement | invalid | error`
 
-用户从网页主动重解不会覆盖旧 attempt；它创建新的 run id。默认流程没有自动后核验兜底：已有题首轮不一致直接等待人工审查；生成题首轮失败不写入源文件，下一次扩题根据仍存在的配额缺口生成不同候选，并把旧失败题面列为禁重复项。历史版本留下的 `postverify` child run 只读兼容，不会被新流程创建。人工接受任一候选后进入 `final`，同时保留全部旧 review。对已有 `answer_final.jsonl` 的题，扫描时会兼容导入为 final，但 `verify` 与交付 validator 仍要求它和权威 `questions.jsonl` 完全一致；旧产物不因被导入就自动获得新交付证书。
+用户从网页主动重解不会覆盖旧 attempt；它创建新的 run id。默认流程没有自动后核验兜底：已有题首轮不一致直接等待人工审查；生成题首轮失败不写入源文件，下一次扩题根据仍存在的配额缺口生成不同候选，并把旧失败题面列为禁重复项。历史版本留下的 `postverify` child run 只读兼容，不会被新流程创建。种子题进入 `disagreement`、`invalid` 或 `error` 时一律保留为人工审查义务，默认显示在“待审查”；它可以为保持干净交付而暂不出现在权威 `questions.jsonl`，但绝不能从 portable review queue 消失。人工接受任一候选后进入 `final`，通过逐题 validator 后把被隔离的 seed 原子追加回 `questions.jsonl`，同时保留全部旧 review。对已有 `answer_final.jsonl` 的题，扫描时会兼容导入为 final，但 `verify` 与交付 validator 仍要求它和权威 `questions.jsonl` 完全一致；旧产物不因被导入就自动获得新交付证书。
+
+Portable queue 导入必须按 `relative questions.jsonl path + NUL + id` 重算并核对 `question_key`，拒绝路径穿越、重复 key、题面与当前源文件漂移及非未解决状态。重复扫描使用 `INSERT OR IGNORE` 恢复 attempt/review/annotation，不制造第二份证据；数据库中已为 `final` 的题永不被旧 queue 降级。
 
 ## 交付契约
 

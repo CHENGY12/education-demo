@@ -17,7 +17,7 @@ Manage the whole question-bank lifecycle while keeping the three candidate solut
 5. Let the teacher inspect all three processes, independently recompute the answer, and explicitly decide whether auto-promotion is safe.
 6. Auto-promote only when all three answers are equivalent, every material reasoning chain is correct, the question is valid, the teacher returns `auto_promote=true`, and the bank's per-question validator accepts the exact Teacher answer and solution.
 7. Treat a user's re-solve hint as guidance, not ground truth. Show it to all three fresh solvers identically.
-8. Run exactly one automatic 3+1 round per question. A seed/existing disagreement goes directly to human review. A rejected generated question is never written to source; a later `expand`/`run` creates a distinct replacement for the still-open quota and excludes prior rejected stems. Never feed prior answers, Teacher diagnostics, concrete derivations, vote counts, or Agent identities into replacement generation.
+8. Run exactly one automatic 3+1 round per question. A seed/existing question with `disagreement`, `invalid`, or `error` is never discarded: quarantine it from clean delivery, preserve it in the portable review queue, and show it under the default **待审查** view. A rejected generated question is never written to source; a later `expand`/`run` creates a distinct replacement for the still-open quota and excludes prior rejected stems. Never feed prior answers, Teacher diagnostics, concrete derivations, vote counts, or Agent identities into replacement generation.
 9. Require `issues=[]` for every fully-correct solver, a valid option id for multiple choice, an unchanged public question snapshot, a valid/no-revision question annotation, and a clear `retry_feedback=none` routing contract before automatic final writeback.
 
 The local runner enforces these boundaries. Do not replace it with three calls in one conversational context.
@@ -34,7 +34,7 @@ python3 "$SKILL_ROOT/scripts/qb_manager.py" init --bank "$BANK_ROOT"
 python3 "$SKILL_ROOT/scripts/qb_manager.py" scan --bank "$BANK_ROOT"
 ```
 
-`doctor` reports the automatically selected provider. If `OPENAI_API_KEY` exists, `auto` selects the Responses API; otherwise it selects the authenticated Codex CLI. The key is read only from the process environment and is never persisted. `init` creates `<BANK_ROOT>/.qb-review/`; `scan` indexes source JSONL and imports compatible legacy artifacts.
+`doctor` reports the automatically selected provider. If `OPENAI_API_KEY` exists, `auto` selects the Responses API; otherwise it selects the authenticated Codex CLI. The key is read only from the process environment and is never persisted. `init` creates `<BANK_ROOT>/.qb-review/`; `scan` indexes source JSONL, imports compatible legacy artifacts, and restores `<BANK_ROOT>/review-queue/unresolved.jsonl`. The last file is Git-portable: a fresh clone can reconstruct unresolved seed/candidate questions, their three attempts, Teacher review, and staged annotation without shipping the local SQLite database.
 
 No separate API key does not mean offline: a `Logged in using ChatGPT` session still sends the sanitized prompt and any explicitly attached question image to Codex cloud. If the bank may not leave the machine, stop before `audit`/`expand` and connect an approved local provider implementation instead.
 
@@ -88,7 +88,7 @@ python3 "$SKILL_ROOT/scripts/qb_manager.py" expand \
   --limit 1
 ```
 
-The generator is also candidate solver 1 for newly generated questions. Solvers 2 and 3 receive only the generated stem and options. For both seed and generated questions, an accepted final synchronizes the Teacher answer/solution into authoritative `questions.jsonl`, the database, and the internal compatibility `answer_final.jsonl`. A failed generated candidate remains as auditable **候选不一致** data but is not added to `questions.jsonl`; rerun `expand` (or `run --mode full`) to fill the still-open quota with a new stem. The next generator request contains only the prior rejected stems/statuses as a do-not-repeat list, never their answers, solutions, or Teacher comments.
+The generator is also candidate solver 1 for newly generated questions. Solvers 2 and 3 receive only the generated stem and options. For both seed and generated questions, an accepted final synchronizes the selected answer/solution into authoritative `questions.jsonl`, the database, and the internal compatibility `answer_final.jsonl`. An unresolved seed may be absent from the clean authoritative file while quarantined, but it remains in `review-queue/unresolved.jsonl`; human acceptance runs the bank validator and atomically appends it back to its node. A failed generated candidate remains as auditable **候选不一致** data but is not added to `questions.jsonl`; rerun `expand` (or `run --mode full`) to fill the still-open quota with a new stem. The next generator request contains only the prior rejected stems/statuses as a do-not-repeat list, never their answers, solutions, or Teacher comments.
 
 When the bank root provides `validate.py` with `check_question(q, line_no)`, the runner executes that per-question contract before **any** existing or generated question can enter final; source writeback uses the same gate. The bundled contract rejects control characters, LaTeX outside math, unescaped formula percentages, naked units, option dumps in stems, letter-only options, empty formulas, repair chatter, and internal review terms. After finishing a scope, also run the bank's aggregate quota validator:
 
@@ -112,7 +112,7 @@ python3 "$BANK_ROOT/validate.py" "cn-nanjing-g11-2026/物理" \
 python3 "$BANK_ROOT/validate.py" "/absolute/path/to/clean-delivery" --delivery
 ```
 
-The clean directory includes only Teacher-pass, manager-final questions whose current question snapshot, answer, three solver answers, and Teacher-solution hash agree. Per node it contains `questions.jsonl` and `answer_review.jsonl`; add `--include-source-assets` only when `reference.md` and the original question image should accompany delivery. It never copies `answer_final.jsonl`, `answers1/2/3.jsonl`, `.qb-review`, or invocation artifacts. Do not manually copy extra files into the package.
+The clean directory includes only Teacher-pass, manager-final questions whose current question snapshot, answer, three solver answers, and Teacher-solution hash agree. Per node it contains `questions.jsonl` and `answer_review.jsonl`; add `--include-source-assets` only when `reference.md` and the original question image should accompany delivery. It never copies `answer_final.jsonl`, `answers1/2/3.jsonl`, `.qb-review`, `review-queue`, or invocation artifacts. Unresolved seeds are excluded from the machine-consumable delivery, but remain preserved for human review in the source repository's portable queue. Do not manually copy extra files into the package.
 
 The package root also contains a deterministic `manifest.json` covering every `questions.jsonl` path, byte size, SHA-256, question count, and aggregate difficulty/pool/answer counts. `--delivery` recomputes it and fails on drift. It also rejects AppleDouble files, `.DS_Store`, `__MACOSX`, and directory names containing ` copy`.
 
@@ -139,7 +139,7 @@ Open `http://127.0.0.1:8765`. Keep the server process running. The UI can:
 - submit a hint or proposed method and enqueue three fresh isolated solves plus a new teacher review;
 - continue browsing while queued jobs run and display completion notifications.
 - paginate through arbitrarily large result sets instead of truncating the queue.
-- default to **待审查**, containing only `seed` questions whose status is `disagreement`; place other disagreement items in **候选不一致**. Invalid/error/running/final remain available through the status filter and global job tray.
+- default to **待审查**, containing `seed` questions whose status is `disagreement`, `invalid`, or `error`; these rows are review obligations and must never disappear merely because a clean delivery excludes them. Place non-seed disagreements in **候选不一致**; generated invalid/error rows remain available through the status filter. Running/final remain available through the status filter and global job tray.
 - browse the shared **解题技能库**, inspect immutable versions and provenance, and submit a guidance-based revision guarded by the current SHA-256.
 - inspect the automatic first round, user-requested re-solves, legacy fallback rounds, and staged question-quality annotations. New runs never launch an automatic fallback; proposed question revisions are not silently applied to an already-finalized item.
 
@@ -165,7 +165,7 @@ python3 "$SKILL_ROOT/scripts/qb_manager.py" verify --bank "$BANK_ROOT"
 python3 "$SKILL_ROOT/scripts/qb_manager.py" export --bank "$BANK_ROOT"
 ```
 
-`export` atomically refreshes `<BANK_ROOT>/错题集.jsonl` from unresolved records and regenerates `answer_review.jsonl` with question/Teacher-solution hashes. Never derive truth from answer-string majority alone.
+`export` atomically refreshes both the local compatibility file `<BANK_ROOT>/错题集.jsonl` and the Git-portable `<BANK_ROOT>/review-queue/unresolved.jsonl` from unresolved records, then regenerates `answer_review.jsonl` with question/Teacher-solution hashes. Never derive truth from answer-string majority alone.
 
 ## Scale safely
 
