@@ -1424,6 +1424,7 @@ class ManagerTests(unittest.TestCase):
             qb.get_question_row(self.state, row["question_key"])
         )
         self.assertEqual(snapshot["language_variant"], "zh-Hant-HK")
+        self.assertTrue(set(snapshot).issubset(qb.SOLVER_QUESTION_FIELDS))
         self.assertEqual(
             qb.language_variant_for_node("cn-shanghai-2-2026/物理/node-1"),
             "zh-Hans-CN",

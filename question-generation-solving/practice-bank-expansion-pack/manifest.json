@@ -1,0 +1,160 @@
+{
+  "answer_counts": {
+    "A": 107,
+    "B": 97,
+    "C": 79,
+    "D": 63
+  },
+  "difficulty_counts": {
+    "high": 115,
+    "low": 115,
+    "mid": 116
+  },
+  "files": [
+    {
+      "bytes": 17491,
+      "path": "cn-shanghai-2-2026/物理/高二物理阶段质量调研_1/questions.jsonl",
+      "questions": 15,
+      "sha256": "69af0d46b9094a0c960d44c845e1c97143bacc98b66deb829bede24288cc4515"
+    },
+    {
+      "bytes": 22296,
+      "path": "cn-shanghai-2-2026/物理/高二物理阶段质量调研_10/questions.jsonl",
+      "questions": 15,
+      "sha256": "858c72c4a10f45ebbd0a9a416cb6f3ed1165fbbc6434dcf36d6bc25a1f30b539"
+    },
+    {
+      "bytes": 15438,
+      "path": "cn-shanghai-2-2026/物理/高二物理阶段质量调研_11(1)/questions.jsonl",
+      "questions": 15,
+      "sha256": "cdb3a2f785f102e7cd58c0c23d8ab546e86334f13b06eff2b75f6104b919f29d"
+    },
+    {
+      "bytes": 19841,
+      "path": "cn-shanghai-2-2026/物理/高二物理阶段质量调研_11(2)/questions.jsonl",
+      "questions": 15,
+      "sha256": "af184922b768429f159a4dfcc5d7870af4be27093c30bab55c1674fe74033a02"
+    },
+    {
+      "bytes": 19836,
+      "path": "cn-shanghai-2-2026/物理/高二物理阶段质量调研_11(3)/questions.jsonl",
+      "questions": 15,
+      "sha256": "5a76266a5d994dccdbff355e5288249e04cff19f44c23e217d9e9e99048b1b50"
+    },
+    {
+      "bytes": 21395,
+      "path": "cn-shanghai-2-2026/物理/高二物理阶段质量调研_12(1)/questions.jsonl",
+      "questions": 16,
+      "sha256": "593b7b0cad4c39cec78f2398bcbdb1cc32f607e08542e10a33d4dadc8ea90296"
+    },
+    {
+      "bytes": 19646,
+      "path": "cn-shanghai-2-2026/物理/高二物理阶段质量调研_12(2)/questions.jsonl",
+      "questions": 15,
+      "sha256": "6e085f86d330a348138bdd843448ac2bae769f1625a8f93ab0d2df1b57d95afc"
+    },
+    {
+      "bytes": 19384,
+      "path": "cn-shanghai-2-2026/物理/高二物理阶段质量调研_12(3)/questions.jsonl",
+      "questions": 15,
+      "sha256": "93d1d3ebcdb9072d7c0f146df5536f6ff89509beb4544806913d7f90ef31040f"
+    },
+    {
+      "bytes": 20817,
+      "path": "cn-shanghai-2-2026/物理/高二物理阶段质量调研_12(4)/questions.jsonl",
+      "questions": 15,
+      "sha256": "62548513f2d2300c54529d0f2fa71913f2d1b8d86f3a323eb1627de01133a2bb"
+    },
+    {
+      "bytes": 20418,
+      "path": "cn-shanghai-2-2026/物理/高二物理阶段质量调研_12(5)/questions.jsonl",
+      "questions": 15,
+      "sha256": "4764888319f8d4a8f7767a2bc49eb585edeb998ca0c8919a4ff871ec462e3d73"
+    },
+    {
+      "bytes": 20590,
+      "path": "cn-shanghai-2-2026/物理/高二物理阶段质量调研_13(1)/questions.jsonl",
+      "questions": 15,
+      "sha256": "fa0cc6c0e812f9e262b6316fb256e970134b2a72e073302fc11aacf591e67a7a"
+    },
+    {
+      "bytes": 27034,
+      "path": "cn-shanghai-2-2026/物理/高二物理阶段质量调研_13(2)/questions.jsonl",
+      "questions": 15,
+      "sha256": "2fb9153a108f8cc116223fecc4105c1cf9e0cb0d4593bf1aedf6fb9c154d7b00"
+    },
+    {
+      "bytes": 18186,
+      "path": "cn-shanghai-2-2026/物理/高二物理阶段质量调研_14(1)/questions.jsonl",
+      "questions": 15,
+      "sha256": "0637b777e445ed0ee6e25d307ce16165b579b542ce72e3fd2828724e07ca9777"
+    },
+    {
+      "bytes": 19559,
+      "path": "cn-shanghai-2-2026/物理/高二物理阶段质量调研_14(2)/questions.jsonl",
+      "questions": 15,
+      "sha256": "c1623cd98b4f5c02d342e0edbde8ccd071aa81f16d247aa4a53b66a3f322488f"
+    },
+    {
+      "bytes": 20308,
+      "path": "cn-shanghai-2-2026/物理/高二物理阶段质量调研_14(3)/questions.jsonl",
+      "questions": 15,
+      "sha256": "c28387f63798d4b793ae87fc9b16318c631b8878a2c02e24b5237e4146d0f905"
+    },
+    {
+      "bytes": 18373,
+      "path": "cn-shanghai-2-2026/物理/高二物理阶段质量调研_2/questions.jsonl",
+      "questions": 15,
+      "sha256": "4df9f99a0379d6544864e8e81b47ae522209f78646d54b367af061375a7097c6"
+    },
+    {
+      "bytes": 18324,
+      "path": "cn-shanghai-2-2026/物理/高二物理阶段质量调研_3/questions.jsonl",
+      "questions": 15,
+      "sha256": "c6d70c0c646e01791986848494bd400275765f0a827796bd67af9d5e512ae5fd"
+    },
+    {
+      "bytes": 18089,
+      "path": "cn-shanghai-2-2026/物理/高二物理阶段质量调研_4/questions.jsonl",
+      "questions": 15,
+      "sha256": "60c599651a5f91b41d9ec5a8215c074563d0b0927ee10a228e319f0d85466f04"
+    },
+    {
+      "bytes": 18764,
+      "path": "cn-shanghai-2-2026/物理/高二物理阶段质量调研_5/questions.jsonl",
+      "questions": 15,
+      "sha256": "20d01a592791a7980c675770028e7fe2b8224f6987bdc81b49bf002364f92d7f"
+    },
+    {
+      "bytes": 18702,
+      "path": "cn-shanghai-2-2026/物理/高二物理阶段质量调研_6/questions.jsonl",
+      "questions": 15,
+      "sha256": "6c66e48dd886ebee233fd7d875df16cb5bf92aa3d82fef8dc9207a24d8d081ee"
+    },
+    {
+      "bytes": 21790,
+      "path": "cn-shanghai-2-2026/物理/高二物理阶段质量调研_7/questions.jsonl",
+      "questions": 15,
+      "sha256": "77e7ff1e02c4679995255b5203fc84a383ac4e4a5345dbcef5a294913ec33d26"
+    },
+    {
+      "bytes": 19433,
+      "path": "cn-shanghai-2-2026/物理/高二物理阶段质量调研_8/questions.jsonl",
+      "questions": 15,
+      "sha256": "8b53c853aaff6c14fdcc720d76063856c4459118a9bc6d3f3d658291cfc89a73"
+    },
+    {
+      "bytes": 20255,
+      "path": "cn-shanghai-2-2026/物理/高二物理阶段质量调研_9/questions.jsonl",
+      "questions": 15,
+      "sha256": "afd446f0dc887db764f317c6b48791175027ff26797df360c6f1b118dee52f89"
+    }
+  ],
+  "nodes": 23,
+  "pool_counts": {
+    "display": 207,
+    "exam": 139
+  },
+  "questions": 346,
+  "schema_version": 1
+}

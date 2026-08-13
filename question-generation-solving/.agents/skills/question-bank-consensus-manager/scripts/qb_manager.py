@@ -62,6 +62,28 @@ SOLVER_LENSES = {
     "solver3": "以反例审查者视角做题，主动寻找陷阱，并用边界、量纲或极端情形复核。",
 }
 
+# One shared transport contract keeps request construction and forensic
+# verification aligned.  ``language_variant`` is routing metadata (for example
+# Hong Kong Traditional Chinese), so it is allowed in solver requests even
+# though it is deliberately excluded from the content snapshot hash.
+SOLVER_QUESTION_FIELDS = frozenset(
+    {
+        "id",
+        "display_id",
+        "subject",
+        "prompt",
+        "options",
+        "difficulty",
+        "question_type",
+        "language_variant",
+        "user_guidance",
+        "image_attachment",
+        "question_snapshot_sha256",
+        "solution_skills",
+        "verification_feedback",
+    }
+)
+
 DEFAULT_QUOTAS = {
     "low": {"display": 3, "exam": 2},
     "mid": {"display": 3, "exam": 2},
@@ -6146,20 +6168,7 @@ def verify_state(state: State) -> dict[str, Any]:
     invocation_files = list(state.runs_dir.rglob("invocation.json"))
     teacher_requests: list[tuple[Path, str, dict[str, Any]]] = []
     solver_inputs: dict[str, dict[str, Any]] = {}
-    solver_question_fields = {
-        "id",
-        "display_id",
-        "subject",
-        "prompt",
-        "options",
-        "difficulty",
-        "question_type",
-        "user_guidance",
-        "image_attachment",
-        "question_snapshot_sha256",
-        "solution_skills",
-        "verification_feedback",
-    }
+    solver_question_fields = SOLVER_QUESTION_FIELDS
     for invocation_path in invocation_files:
         try:
             invocation = json.loads(invocation_path.read_text(encoding="utf-8"))
